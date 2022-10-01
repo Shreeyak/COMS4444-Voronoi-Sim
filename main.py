@@ -5,6 +5,7 @@ import cv2
 import matplotlib as mpl
 import pygame
 import scipy
+import logging
 # from matplotlib import pyplot as plt
 from typing import Tuple, List, Dict
 
@@ -178,7 +179,7 @@ class GameMap:
                 valid_units.append(unit)
         self.units = valid_units
 
-    def metric_to_px(self, pos: Tuple) -> Tuple[int, int]:
+    def metric_to_px(self, pos: Tuple[float, float]) -> Tuple[int, int]:
         """Convert metric unit pos to pixel location on img of grid"""
         x, y = pos
         if not 0 <= x <= self._MAP_W:
@@ -187,6 +188,17 @@ class GameMap:
             raise ValueError(f"y out of range [0, {self._MAP_W}]: {y}")
 
         px, py = map(lambda z: int(round(z * self.scale_px)), [x, y])
+        return px, py
+
+    def px_to_metric(self, pos_px: Tuple) -> Tuple[float, float]:
+        """Convert a pixel coord on map to metric"""
+        x, y = pos_px
+        if not 0 <= x <= self.img_h:
+            raise ValueError(f"x out of range [0, {self._MAP_W}]: {x}")
+        if not 0 <= y <= self.img_w:
+            raise ValueError(f"y out of range [0, {self._MAP_W}]: {y}")
+
+        px, py = map(lambda z: round(z / self.scale_px, 2), [x, y])
         return px, py
 
     def get_colored_grid(self,
@@ -235,14 +247,21 @@ class GameMap:
 
 def pygame_main(game_map):
     """Main loop to run pygame"""
-    s_width = game_map.img_w
-    s_height = game_map.img_h
-
     pygame.init()
+
+    # We draw the map and a section below the map for text
+    text_h = 40  # Height of text info box
+    s_width = game_map.img_w
+    s_height = game_map.img_h + text_h
     screen = pygame.display.set_mode((s_width, s_height))  # Main screen surface. X-right, Y-down (not numpy format)
 
-    timeout = 5000  # milliseconds
-    print(f"\nStarting pygame. Game will automatically close after {timeout}ms. Close the window to quit manually. ")
+    font = pygame.font.SysFont(None, 32)
+    text_box_rect = pygame.rect.Rect(0, s_height - text_h, s_width, text_h)
+
+    timeout = 300000  # milliseconds
+    clock = pygame.time.Clock()
+    print(f"\nStarting pygame. Game will automatically close after {timeout}ms. ")
+    logging.info(f"Press Esc or close the window to quit the game.")
 
     # Create an img of the map
     occ_map = game_map.compute_occupancy_map()
@@ -251,15 +270,46 @@ def pygame_main(game_map):
     _occ_img = np.swapaxes(occ_img, 0, 1)  # Req to correct coords for pygame format
     occ_surf = pygame.pixelcopy.make_surface(_occ_img)
 
+    # Game data
+    curr_player = 0  # The player whose units will be modified
+    info_mode = "Click to add a unit"
+
     running = True
     while running:
         dt = pygame.time.get_ticks()
         if dt > timeout:
+            logging.debug(f"Timeout. Quitting")
             running = False
+
+        dt = clock.tick(30)  # Limit to 30fps
+
+        # TODO: Low prior: Visualize a player-colored circle over mouse. To show which player is selected.
+        # TODO: Click and drag to move units
+        # TODO: Remove units with click (shift-click or change mode with key)
+        # TODO: Check which units are killed on keypress
+        # TODO: Ignore multiple clicks: If multiple clicks on the exact spot, don't add a unit
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.pos[1] > game_map.img_h:
+                    continue  # Ignore clicks on the text area
+                pos = game_map.px_to_metric(event.pos)
+                game_map.add_units([Unit(curr_player, pos[::-1])])
+                occ_map = game_map.compute_occupancy_map()
+                occ_img = game_map.get_colored_grid(occ_map)
+                logging.debug(f"Added unit: Player: {curr_player}, Pos: {pos}")
+
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                elif pygame.K_0 <= event.key <= pygame.K_9:
+                    pl_map = {pygame.K_0: 0, pygame.K_1: 1, pygame.K_2: 2, pygame.K_3: 3}
+                    curr_player = pl_map[event.key]
+
+                logging.debug(f"Player set to: {curr_player}")
 
         # For future flexibility, keep main screen separate from the map we'll draw
         screen.fill((255, 255, 255))
@@ -272,12 +322,21 @@ def pygame_main(game_map):
         # Draw the img surface on the screen surface
         screen.blit(occ_surf, (0, 0))
 
+        # Add Info text
+        info_text = f"Player: {curr_player}   " + info_mode
+        text_surf = font.render(info_text, True, (0, 0, 0))
+        text_rect = text_surf.get_rect()  # Size of the text
+        text_rect.center = text_box_rect.center  # Center text in text box
+        screen.blit(text_surf, text_rect.topleft)
+
         pygame.display.update()
 
     pygame.quit()
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
+
     game_map = GameMap(map_width=10, scale_px=60, unit_px=5)
 
     # Viz grid
