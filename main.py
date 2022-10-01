@@ -55,6 +55,19 @@ class GameMap:
         self.unit_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
         self.units = []  # List of all the units on the map
         self._occupancy_map = None  # Stores the latest computed occupancy map
+        self.reset()
+
+    def reset(self):
+        self.units = []
+        self.unit_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
+        self._occupancy_map = None  # Stores the latest computed occupancy map
+
+        # Game starts with 1 unit for each player in the corners
+        self.add_units([Unit(0, (0.5, 0.5)),
+                        Unit(1, (0.5, 9.5)),
+                        Unit(2, (9.5, 9.5)),
+                        Unit(3, (9.5, 0.5)),])
+        self.compute_occupancy_map()
 
     def _get_cell_origins(self) -> np.ndarray:
         """Calculates the origin for each cell
@@ -261,7 +274,11 @@ def pygame_main(game_map):
     timeout = 300000  # milliseconds
     clock = pygame.time.Clock()
     print(f"\nStarting pygame. Game will automatically close after {timeout}ms. ")
-    logging.info(f"Press Esc or close the window to quit the game.")
+    print(f"Keybindings:\n"
+          f"  Esc: Quit the game.\n"
+          f"  1-4: Select player 0-3\n"
+          f"  R: Reset game\n"
+          f"  Default Mode: Click to add units")
 
     # Create an img of the map
     occ_map = game_map.compute_occupancy_map()
@@ -307,15 +324,17 @@ def pygame_main(game_map):
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 elif pygame.K_0 <= event.key <= pygame.K_9:
-                    pl_map = {pygame.K_0: 0, pygame.K_1: 1, pygame.K_2: 2, pygame.K_3: 3}
+                    pl_map = {pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2, pygame.K_4: 3}
                     curr_player = pl_map[event.key]
-
-                logging.debug(f"Player set to: {curr_player}")
+                    logging.debug(f"Player set to: {curr_player}")
+                elif event.key == pygame.K_r:
+                    game_map.reset()
+                    occ_map = game_map._occupancy_map
+                    occ_img = game_map.get_colored_grid(occ_map)
+                    logging.debug(f"Reset the map")
 
         # For future flexibility, keep main screen separate from the map we'll draw
         screen.fill((255, 255, 255))
-
-        # Update the map?
 
         # Update the img surface
         pygame.pixelcopy.array_to_surface(occ_surf, np.swapaxes(occ_img, 0, 1))
@@ -341,13 +360,9 @@ if __name__ == '__main__':
     game_map = GameMap(map_width=10, scale_px=60, unit_px=5)
 
     # Viz grid
-    game_map.add_units([Unit(0, (0.5, 0.5)),
-                        Unit(1, (0.5, 9.5)),
-                        Unit(2, (9.5, 0.5)),
-                        Unit(3, (9.5, 9.5)),
-                        Unit(0, (5.7, 5.7)),
-                        Unit(3, (5.3, 5.3)),
-                        ])
+    # Add 2 units to the same cell
+    game_map.add_units([Unit(0, (5.7, 5.7)),
+                        Unit(2, (5.3, 5.3))])
     # Add units that will result in multiple cells at same dist
     game_map.add_units([Unit(0, (0.5, 3.5)),
                         Unit(1, (0.5, 5.5)),
