@@ -3,6 +3,16 @@
 Work in Progress. A simulator to visualize the voronoi game with
 different unit placements.
 
+## Coordinate System
+
+In order to make computation easy, our coordinate system follows numpy indexing.   
+
+Origin: Top-left  
+X-Axis: Top -> Bottom  
+Y-Axis: Left -> Right  
+
+Note: In ordinary metric cases, x is left->right. If using that system, pass metric coords as (y, x)
+
 ## Features
 
 1. Variable Grid Size

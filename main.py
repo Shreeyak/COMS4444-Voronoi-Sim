@@ -69,7 +69,7 @@ class GameMap:
         self.units.extend(units)
         for unit in units:
             cx, cy = self.metric_to_cell(unit.pos)
-            self.unit_map[cy, cx, unit.player] = 1
+            self.unit_map[cx, cy, unit.player] = 1
             # print("Unit Map (0):\n", self.unit_map[:, :, 0])
             # print("/n")
 
@@ -119,9 +119,15 @@ class GameMap:
         # Filter Disputes: Find cells with more than 1 occupied cells at same distance
         same_d = near_dist[:, 1] - near_dist[:, 0]
         disputed = np.isclose(same_d, 0)
-        disputed_cells = candidate_cell_pts[disputed]  # 2 cells with same dist
+        disputed_cells = candidate_cell_pts[disputed]  # 2 cells with same dist. Shape: [N, 2].
         if disputed_cells.shape[0] > 0:
+            disputed_cells_d = near_dist[disputed, 0]  # Radius for search. Shape: [N, ]
+
             # TODO - Find all neighbors within a radius, see if more than 1 player in radius
+            for disp_cell, radius in zip(disputed_cells, disputed_cells_d):
+                # disp_cell shape: [2,]
+                d_near_dist, d_near_idx = kdtree.query(disp_cell, k=4, distance_upper_bound=radius)
+                disputed_ids = player_ids[near_idx[~disputed, 0]]  # Get player ids of the contesting cells
             pass
 
         # For other cells, mark occupancy
@@ -129,8 +135,6 @@ class GameMap:
         not_disputed_cells = candidate_cell_pts[~disputed].astype(np.uint8)  # coords to cell index of occupied cells
         occ_map[not_disputed_cells[:, 0], not_disputed_cells[:, 1]] = not_disputed_ids
 
-        # TODO: Update
-        # occ_map = np.ones((self._MAP_W, self._MAP_W), dtype=np.uint8) * 5
         return occ_map
 
     def remove_killed_units(self):
@@ -167,7 +171,8 @@ class GameMap:
         if not 0 <= y <= self._MAP_W:
             raise ValueError(f"y out of range [0, {self._MAP_W}]: {y}")
 
-        px, py = map(lambda z: int(z), [x, y])
+        px = int(x)
+        py = int(y)
         return px, py
 
     def get_colored_grid(self,
@@ -217,7 +222,7 @@ class GameMap:
                     # grid_rgb[xmin:xmax, ymin:ymax] = self.player_colors[unit.player]
 
                     # Draw Circle
-                    cv2.circle(grid_rgb, pos_px, self.unit_size_px, self.player_colors[unit.player], -1)
+                    cv2.circle(grid_rgb, pos_px[::-1], self.unit_size_px, self.player_colors[unit.player], -1)
 
         return grid_rgb
 
@@ -233,15 +238,15 @@ if __name__ == '__main__':
 
     # Viz grid
     game_map.add_units([Unit(0, (0.5, 0.5)),
-                        Unit(1, (9.5, 0.5)),
-                        Unit(2, (0.5, 9.5)),
+                        Unit(1, (0.5, 9.5)),
+                        Unit(2, (9.5, 0.5)),
                         Unit(3, (9.5, 9.5)),
                         Unit(0, (5.7, 5.7)),
                         Unit(3, (5.3, 5.3)),
                         ])
     # Add units that will result in multiple cells at same dist
-    game_map.add_units([Unit(0, (3.5, 0.5)),
-                        Unit(1, (5.5, 0.5))])
+    game_map.add_units([Unit(0, (0.5, 3.5)),
+                        Unit(1, (0.5, 5.5))])
 
     # Unit Test - Unit-based occupancy
     unit_occ_grid = game_map.get_unit_occupied_cells()
