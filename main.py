@@ -34,20 +34,24 @@ class GameMap:
         Unit coordinates on the map can be floating point.
         """
         self._MAP_W = map_width  # Width of the map in km. Each cell is 1km
+        # Visualization
         self.scale_px = 10  # How many pixels wide each cell will be
         self.unit_size_px = 2
         self.img_h = self._MAP_W * self.scale_px
         self.img_w = self._MAP_W * self.scale_px
-        self.units = []
-
         # Colors from: https://sashamaps.net/docs/resources/20-colors/
         self.player_back_colors = ['#fabed4', '#ffd8b1', '#aaffc3', '#42d4f4']
         player_colors = ['#e6194B', '#f58231', '#3cb44b', '#4363d8']
         self.player_colors = list(map(self._hex_to_rgb, player_colors))
 
+        # Optimization
+        self._num_contested_pts_check = 10  # Number of closest points to check in case of disputed cells.
+
+        # Data
         self.cell_origins = self._get_cell_origins()
-        # Each channel represents a player. If 1, then the player has a unit in that cell.
+        # Unit Map: Each channel represents a player. If 1, then the player has a unit in that cell, 0 otherwise.
         self.unit_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
+        self.units = []  # List of all the units on the map
 
     def _get_cell_origins(self) -> np.ndarray:
         """Calculates the origin for each cell
@@ -68,11 +72,14 @@ class GameMap:
     def add_units(self, units: List[Unit]):
         self.units.extend(units)
         for unit in units:
-            cx, cy = self.metric_to_cell(unit.pos)
-            self.unit_map[cx, cy, unit.player] = 1
-            # print("Unit Map (0):\n", self.unit_map[:, :, 0])
-            # print("/n")
+            x, y = unit.pos
+            if not 0 <= x <= self._MAP_W:
+                raise ValueError(f"x out of range [0, {self._MAP_W}]: {x}")
+            if not 0 <= y <= self._MAP_W:
+                raise ValueError(f"y out of range [0, {self._MAP_W}]: {y}")
 
+            cx, cy = int(x), int(y)
+            self.unit_map[cx, cy, unit.player] = 1
 
     def get_unit_occupied_cells(self) -> np.ndarray:
         """Calculate which cells are counted as occupied due to unit presence (based on unit map)
@@ -119,21 +126,45 @@ class GameMap:
         # Filter Disputes: Find cells with more than 1 occupied cells at same distance
         same_d = near_dist[:, 1] - near_dist[:, 0]
         disputed = np.isclose(same_d, 0)
-        disputed_cells = candidate_cell_pts[disputed]  # 2 cells with same dist. Shape: [N, 2].
-        if disputed_cells.shape[0] > 0:
-            disputed_cells_d = near_dist[disputed, 0]  # Radius for search. Shape: [N, ]
+        disputed_cell_pts = candidate_cell_pts[disputed]  # Shape: [N, 2].
+        if disputed_cell_pts.shape[0] > 0:
+            # Distance of nearest cell will be radius of our search
+            radius_of_dispute = near_dist[disputed, 0]  # Shape: [N, ]
+            occ_map = self._filter_disputes(occ_map, kdtree, disputed_cell_pts, radius_of_dispute, player_ids)
 
-            # TODO - Find all neighbors within a radius, see if more than 1 player in radius
-            for disp_cell, radius in zip(disputed_cells, disputed_cells_d):
-                # disp_cell shape: [2,]
-                d_near_dist, d_near_idx = kdtree.query(disp_cell, k=4, distance_upper_bound=radius)
-                disputed_ids = player_ids[near_idx[~disputed, 0]]  # Get player ids of the contesting cells
-            pass
-
-        # For other cells, mark occupancy
+        # For the rest of the cells (undisputed), mark occupancy
         not_disputed_ids = player_ids[near_idx[~disputed, 0]]  # Get player id of the nearest cell
         not_disputed_cells = candidate_cell_pts[~disputed].astype(np.uint8)  # coords to cell index of occupied cells
         occ_map[not_disputed_cells[:, 0], not_disputed_cells[:, 1]] = not_disputed_ids
+
+        return occ_map
+
+    def _filter_disputes(self, occ_map, kdtree, disputed_cell_pts, radius_of_dispute, player_ids):
+        """For each cell with multiple nearby neighbors, resolve dispute
+        Split into a func for profiling
+        """
+        # Find all neighbors within a radius: If all neigh are same player, cell not disputed
+        for disp_cell, radius in zip(disputed_cell_pts, radius_of_dispute):
+            # Radius needs padding to conform to < equality.
+            rad_pad = 0.1
+            d_near_dist, d_near_idx = kdtree.query(disp_cell,
+                                                   k=self._num_contested_pts_check,
+                                                   distance_upper_bound=radius + rad_pad)
+            # We will get exactly as many points as requested. Extra points will have inf dist
+            # Need to filter those points that are within radius (dist < inf).
+            valid_pts = np.isfinite(d_near_dist)
+            d_near_idx = d_near_idx[valid_pts]
+
+            disputed_ids = player_ids[d_near_idx]  # Get player ids of the contesting cells
+            all_same_ids = np.all(disputed_ids == disputed_ids[0])
+            if all_same_ids:
+                # Mark cell belonging to this player
+                player = disputed_ids[0]
+            else:
+                # Mark cell as contested
+                player = 4
+            disp_cell = disp_cell.astype(np.uint8)  # Shape: [2,]
+            occ_map[disp_cell[0], disp_cell[1]] = player
 
         return occ_map
 
@@ -144,14 +175,6 @@ class GameMap:
                 valid_units.append(unit)
         self.units = valid_units
 
-    # def set_indices(self):
-    #     """snippet to set indices in a 2d array to set values"""
-    #     c = np.arange(0, 20).reshape((2, 10))
-    #     idx = np.array([[0, 1], [0, 2], [1, 9]])  # The indices to the changed
-    #     print(c)
-    #     c[tuple(idx.T)] = 118
-    #     print(c)
-
     def metric_to_px(self, pos: Tuple) -> Tuple[int, int]:
         """Convert metric unit pos to pixel location on img of grid"""
         x, y = pos
@@ -161,18 +184,6 @@ class GameMap:
             raise ValueError(f"y out of range [0, {self._MAP_W}]: {y}")
 
         px, py = map(lambda z: int(round(z * self.scale_px)), [x, y])
-        return px, py
-
-    def metric_to_cell(self, pos: Tuple) -> Tuple[int, int]:
-        """Convert metric unit pos to the location of the cell containing unit"""
-        x, y = pos
-        if not 0 <= x <= self._MAP_W:
-            raise ValueError(f"x out of range [0, {self._MAP_W}]: {x}")
-        if not 0 <= y <= self._MAP_W:
-            raise ValueError(f"y out of range [0, {self._MAP_W}]: {y}")
-
-        px = int(x)
-        py = int(y)
         return px, py
 
     def get_colored_grid(self,
@@ -212,16 +223,8 @@ class GameMap:
         if draw_units:
             for unit in self.units:
                 if unit.status > 0:
+                    # Draw Circle for each unit
                     pos_px = self.metric_to_px(unit.pos)
-
-                    # Draw Square: Ensure that we do not exceed image bounds and wrap around
-                    # xmin = max(pos_px[0] - self.unit_size_px, 0)
-                    # ymin = max(pos_px[1] - self.unit_size_px, 0)
-                    # xmax = min(pos_px[0] + self.unit_size_px, self.img_w - 1)
-                    # ymax = min(pos_px[1] + self.unit_size_px, self.img_h - 1)
-                    # grid_rgb[xmin:xmax, ymin:ymax] = self.player_colors[unit.player]
-
-                    # Draw Circle
                     cv2.circle(grid_rgb, pos_px[::-1], self.unit_size_px, self.player_colors[unit.player], -1)
 
         return grid_rgb
@@ -229,12 +232,6 @@ class GameMap:
 
 if __name__ == '__main__':
     game_map = GameMap(map_width=10)
-
-    # Unit Test - Grid utils
-    pos = (np.random.random((2,)) * 10)
-    pos = tuple(pos.tolist())
-    print(f"Test - Pos: {pos}\n  Pixel: {game_map.metric_to_px(pos)}\n  Cell: {game_map.metric_to_cell(pos)}")
-    print(f"  Cell Coord: {game_map.cell_origins[game_map.metric_to_cell(pos)]}")
 
     # Viz grid
     game_map.add_units([Unit(0, (0.5, 0.5)),
@@ -246,18 +243,19 @@ if __name__ == '__main__':
                         ])
     # Add units that will result in multiple cells at same dist
     game_map.add_units([Unit(0, (0.5, 3.5)),
-                        Unit(1, (0.5, 5.5))])
+                        Unit(1, (0.5, 5.5)),
+                        Unit(0, (0.5, 2.5))])
 
-    # Unit Test - Unit-based occupancy
+    # Test - Unit-based occupancy
     unit_occ_grid = game_map.get_unit_occupied_cells()
-    print("Test - Unit Occupancy Grid:\n", unit_occ_grid)
+    print("\nTest - Unit Occupancy Grid (5 = Not computed yet):\n", unit_occ_grid)
     # grid_rgb = game_map.get_colored_grid(unit_occ_grid, draw_units=True)
     # plt.imshow(grid_rgb)
     # plt.show()
 
-    # Occupancy Grid
+    # Full Occupancy Grid
     occ_grid = game_map.compute_occupancy_map()
-    print("Occupancy Grid:\n", occ_grid)
+    print("\nOccupancy Grid:\n", occ_grid)
     grid_rgb = game_map.get_colored_grid(occ_grid, draw_units=True)
     plt.imshow(grid_rgb)
     plt.show()
