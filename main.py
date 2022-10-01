@@ -1,14 +1,16 @@
 """This is a simulator for Project 2 of COMS 4444 (Fall 2022) - Voronoi"""
 
-import numpy as np
+import logging
+from typing import Tuple, List, Optional
+
 import cv2
 import matplotlib as mpl
+import numpy as np
 import pygame
 import scipy
-import logging
-# from matplotlib import pyplot as plt
-from typing import Tuple, List, Dict
 
+
+# from matplotlib import pyplot as plt
 # mpl.use('TkAgg')
 
 
@@ -60,13 +62,12 @@ class GameMap:
     def reset(self):
         self.units = []
         self.unit_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
-        self._occupancy_map = None  # Stores the latest computed occupancy map
 
         # Game starts with 1 unit for each player in the corners
         self.add_units([Unit(0, (0.5, 0.5)),
                         Unit(1, (0.5, 9.5)),
                         Unit(2, (9.5, 9.5)),
-                        Unit(3, (9.5, 0.5)),])
+                        Unit(3, (9.5, 0.5))])
         self.compute_occupancy_map()
 
     def _get_cell_origins(self) -> np.ndarray:
@@ -214,25 +215,27 @@ class GameMap:
         px, py = map(lambda z: round(z / self.scale_px, 2), [x, y])
         return px, py
 
-    def get_colored_grid(self,
-                         grid: np.ndarray,
-                         draw_major_lines: bool = True,
-                         draw_units: bool = True):
-        """Visualizes a 100x100 grid for the voronoi game.
+    def get_colored_occ_map(self,
+                            occ_map: Optional[np.ndarray] = None,
+                            draw_major_lines: bool = True,
+                            draw_units: bool = True):
+        """Visualizes an NxN Occupancy map for the voronoi game.
         Each cell is assigned a number from 0-5: 0-3 represents a player occupying it, 4 means contested
         """
-        assert len(grid.shape) == 2
-        assert grid.max() <= 5 and grid.min() >= 0
+        if occ_map is None:
+            occ_map = self._occupancy_map
+        assert len(occ_map.shape) == 2
+        assert occ_map.max() <= 5 and occ_map.min() >= 0
 
-        if grid.max() == 5:
+        if occ_map.max() > 4:
             print(f"WARNING: Occupancy status has not been computed for all cells in the grid")
-            grid[grid == 5] = 4
+            occ_map[occ_map > 4] = 4
 
         # Colormap
         # Colors from https://sashamaps.net/docs/resources/20-colors/
         cmap = mpl.colors.ListedColormap([*self.player_back_colors, '#ffffff'])
         norm = mpl.colors.BoundaryNorm([-0.5, 0.5, 1.5, 2.5, 3.5, 4.5], 5)  # Discrete colors
-        grid_rgb = cmap(norm(grid))[:, :, :3]
+        grid_rgb = cmap(norm(occ_map))[:, :, :3]
         grid_rgb = (grid_rgb * 255).astype(np.uint8)
 
         # Upsample img
@@ -281,8 +284,8 @@ def pygame_main(game_map):
           f"  Default Mode: Click to add units")
 
     # Create an img of the map
-    occ_map = game_map.compute_occupancy_map()
-    occ_img = game_map.get_colored_grid(occ_map)
+    _ = game_map.compute_occupancy_map()
+    occ_img = game_map.get_colored_occ_map()
 
     _occ_img = np.swapaxes(occ_img, 0, 1)  # Req to correct coords for pygame format
     occ_surf = pygame.pixelcopy.make_surface(_occ_img)
@@ -298,14 +301,12 @@ def pygame_main(game_map):
             logging.debug(f"Timeout. Quitting")
             running = False
 
-        dt = clock.tick(30)  # Limit to 30fps
+        _ = clock.tick(30)  # Limit to 30fps
 
-        # TODO: Low prior: Visualize a player-colored circle over mouse. To show which player is selected.
-        # TODO: Click and drag to move units
         # TODO: Remove units with click (shift-click or change mode with key)
         # TODO: Check which units are killed on keypress
-        # TODO: Ignore multiple clicks: If multiple clicks on the exact spot, don't add a unit
-        # TODO: Reset the game
+        # TODO: (Low priority) Click and drag to move units
+        # TODO: (Low priority) Ignore multiple clicks: If multiple clicks on the exact spot, don't add a unit
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -316,8 +317,8 @@ def pygame_main(game_map):
                     continue  # Ignore clicks on the text area
                 pos = game_map.px_to_metric(event.pos)
                 game_map.add_units([Unit(curr_player, pos[::-1])])
-                occ_map = game_map.compute_occupancy_map()
-                occ_img = game_map.get_colored_grid(occ_map)
+                _ = game_map.compute_occupancy_map()
+                occ_img = game_map.get_colored_occ_map()
                 logging.debug(f"Added unit: Player: {curr_player}, Pos: {pos}")
 
             elif event.type == pygame.KEYDOWN:
@@ -329,8 +330,7 @@ def pygame_main(game_map):
                     logging.debug(f"Player set to: {curr_player}")
                 elif event.key == pygame.K_r:
                     game_map.reset()
-                    occ_map = game_map._occupancy_map
-                    occ_img = game_map.get_colored_grid(occ_map)
+                    occ_img = game_map.get_colored_occ_map()
                     logging.debug(f"Reset the map")
 
         # For future flexibility, keep main screen separate from the map we'll draw
@@ -385,7 +385,7 @@ if __name__ == '__main__':
     # Full Occupancy Grid
     occ_grid = game_map.compute_occupancy_map()
     print("\nOccupancy Grid:\n", occ_grid)
-    # grid_rgb = game_map.get_colored_grid(occ_grid, draw_units=True)
+    # grid_rgb = game_map.get_colored_occ_map(occ_grid)
     # plt.imshow(grid_rgb)
     # plt.show()
     # cv2.imwrite('images/grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
