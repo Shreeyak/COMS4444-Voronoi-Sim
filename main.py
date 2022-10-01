@@ -1,5 +1,6 @@
 """This is a simulator for Project 2 of COMS 4444 (Fall 2022) - Voronoi"""
 
+import argparse
 import logging
 
 import numpy as np
@@ -104,10 +105,15 @@ def pygame_main(game_map: VoronoiGameMap):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='COMS 4444: Voronoi')
+    parser.add_argument("--map_size", "-m", help="Size of the map in km", default=100, type=int)
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO)
 
-    disp_width = 800
-    map_size = 100
-    scale_px = disp_width // map_size
+    game_window_width = 800
+    map_size = args.map_size
+    scale_px = game_window_width // map_size
     game_map = VoronoiGameMap(map_width=map_size, scale_px=scale_px, unit_px=5)
+
     pygame_main(game_map)
