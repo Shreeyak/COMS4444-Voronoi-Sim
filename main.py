@@ -288,6 +288,7 @@ def pygame_main(game_map):
         # TODO: Remove units with click (shift-click or change mode with key)
         # TODO: Check which units are killed on keypress
         # TODO: Ignore multiple clicks: If multiple clicks on the exact spot, don't add a unit
+        # TODO: Reset the game
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:

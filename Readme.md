@@ -1,6 +1,6 @@
 # Voronoi Interactive Sim
 
-![](images/grid_100x100_occupancy.png)
+![](images/demo.gif)
 <p align="center">100x100 grid showing occupancy</p>
 
 Work in Progress. A simulator to visualize the voronoi game with
@@ -20,10 +20,9 @@ Note: In ordinary metric cases, x is left->right. If using that system, pass met
 
 1. Blazing Fast! Uses KDTree to find nearest points for each cell.
    In a 100x100 grid with 100 units each player,
-   the occupancy is computed in 170ms. For a 1000x1000 grid, it takes only
-   740ms.
+   the occupancy is computed in 170ms. 
    ![fast](images/speed_100x100_400pts.png)
-   <p align="center">Occupancy Grid: 170ms to compute. 100x100 grid with 400 random units</p>
+   <p align="center">Occupancy Grid: 100x100 grid with 400 random units. 170ms to compute.</p>
 
 2. Variable Grid Size
 3. Add Units to Grid
