@@ -37,6 +37,7 @@ class GameMap:
         # Visualization
         self.scale_px = 10  # How many pixels wide each cell will be
         self.unit_size_px = 2
+        self.grid_line_thickness = 1
         self.img_h = self._MAP_W * self.scale_px
         self.img_w = self._MAP_W * self.scale_px
         # Colors from: https://sashamaps.net/docs/resources/20-colors/
@@ -214,7 +215,7 @@ class GameMap:
             h, w, _ = grid_rgb.shape
             rows, cols = 10, 10  # Only show major grid lines (100x100 lines too fine)
             col_line = (0, 0, 0)
-            thickness = 1
+            thickness = self.grid_line_thickness
             for x in np.linspace(start=int(thickness/2), stop=w - int(thickness/2), num=cols + 1):
                 x = int(round(x))
                 cv2.line(grid_rgb, (x, 0), (x, h), color=col_line, thickness=thickness)
@@ -260,4 +261,5 @@ if __name__ == '__main__':
     plt.imshow(grid_rgb)
     plt.show()
 
+    grid_rgb = cv2.resize(grid_rgb, (512, 512), interpolation=cv2.INTER_NEAREST)
     cv2.imwrite('grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))

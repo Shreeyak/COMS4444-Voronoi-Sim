@@ -1,5 +1,8 @@
 # Voronoi Interactive Sim
 
+![](grid_10x10_occupancy.png)
+
+
 Work in Progress. A simulator to visualize the voronoi game with
 different unit placements.
 
@@ -21,7 +24,9 @@ Note: In ordinary metric cases, x is left->right. If using that system, pass met
    Note: The history of individual units cannot be tracked.
 4. Visualize and Print Occupancy Grid
 
-   ![](./grid_10x10_occupancy.png)
+
+   ![](grid_10x10_occupancy.png)
+
    
    ```
    Occupancy Grid:
