@@ -40,6 +40,12 @@ class VoronoiGameMap:
         player_colors = ['#e6194B', '#f58231', '#3cb44b', '#4363d8']
         self.player_colors = list(map(self._hex_to_rgb, player_colors))
 
+        self.home_offset = 0.5  # Home bases are offset from corner by this amt
+        self.spawn_loc = {0: (self.home_offset, self.home_offset),
+                          1: (self.home_offset, self._MAP_W - self.home_offset),
+                          2: (self._MAP_W - self.home_offset, self._MAP_W - self.home_offset),
+                          3: (self._MAP_W - self.home_offset, self.home_offset)}
+
         # Optimization
         self._num_contested_pts_check = 10  # Number of closest points to check in case of disputed cells.
 
@@ -56,10 +62,10 @@ class VoronoiGameMap:
         self.unit_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
 
         # Game starts with 1 unit for each player in the corners
-        self.add_units([Unit(0, (0.5, 0.5)),
-                        Unit(1, (0.5, 9.5)),
-                        Unit(2, (9.5, 9.5)),
-                        Unit(3, (9.5, 0.5))])
+        self.add_units([Unit(0, self.spawn_loc[0]),
+                        Unit(1, self.spawn_loc[1]),
+                        Unit(2, self.spawn_loc[2]),
+                        Unit(3, self.spawn_loc[3])])
         self.compute_occupancy_map()
 
     def _get_cell_origins(self) -> np.ndarray:
