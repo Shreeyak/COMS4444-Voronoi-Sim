@@ -250,9 +250,6 @@ if __name__ == '__main__':
     # Test - Unit-based occupancy
     unit_occ_grid = game_map.get_unit_occupied_cells()
     print("\nTest - Unit Occupancy Grid (5 = Not computed yet):\n", unit_occ_grid)
-    # grid_rgb = game_map.get_colored_grid(unit_occ_grid, draw_units=True)
-    # plt.imshow(grid_rgb)
-    # plt.show()
 
     # Full Occupancy Grid
     occ_grid = game_map.compute_occupancy_map()
@@ -261,5 +258,4 @@ if __name__ == '__main__':
     plt.imshow(grid_rgb)
     plt.show()
 
-    grid_rgb = cv2.resize(grid_rgb, (512, 512), interpolation=cv2.INTER_NEAREST)
-    cv2.imwrite('grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
+    # cv2.imwrite('images/grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))

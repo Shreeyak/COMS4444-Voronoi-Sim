@@ -1,3 +1,7 @@
 .idea/
 *.png
 *.jpg
+.DS_Store
+
+# Keep images directory
+!images/*

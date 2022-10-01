@@ -1,7 +1,7 @@
 # Voronoi Interactive Sim
 
-![](grid_10x10_occupancy.png)
-
+![](images/grid_100x100_occupancy.png)
+<p align="center">100x100 grid showing occupancy</p>
 
 Work in Progress. A simulator to visualize the voronoi game with
 different unit placements.
@@ -18,14 +18,16 @@ Note: In ordinary metric cases, x is left->right. If using that system, pass met
 
 ## Features
 
+Blazing Fast! 100x100 grid occupancy is computed within 500ms
+
 1. Variable Grid Size
 2. Add Units to Grid
 3. Represent Units Placement with multi-dimensional array (N, N, 4)  
    Note: The history of individual units cannot be tracked.
-4. Visualize and Print Occupancy Grid
+4. Visualize and Print Occupancy Grid. Here's a 10x10 grid:
 
 
-   ![](grid_10x10_occupancy.png)
+   ![](images/grid_10x10_occupancy.png)
 
    
    ```
@@ -75,6 +77,6 @@ Test - Pos: (2.649603986720316, 7.00243706171401)
    ```
 
    Only cells with a single unit inside them are considered occupied:
-    ![](grid_10x10_unit_occupancy.png)
+    ![](images/grid_10x10_unit_occupancy.png)
 
    
