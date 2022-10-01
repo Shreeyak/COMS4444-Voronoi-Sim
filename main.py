@@ -196,6 +196,8 @@ if __name__ == '__main__':
                         Unit(1, (0.5, 9.5)),
                         Unit(2, (9.5, 0.5)),
                         Unit(3, (9.5, 9.5)),
+                        Unit(0, (5.7, 5.7)),
+                        Unit(3, (5.3, 5.3))
                         ])
     unit_occ_grid = game_map.get_unit_occupied_cells()
     print("Unit Occupancy Grid:\n", unit_occ_grid)
