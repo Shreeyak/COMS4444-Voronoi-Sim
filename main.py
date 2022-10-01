@@ -28,15 +28,15 @@ class Unit:
 
 
 class GameMap:
-    def __init__(self, map_width=1000):
+    def __init__(self, map_width=100, scale_px=10, unit_px=10):
         """Class for methods related to the game map.
         The map is 100x100 cells, each cell is 1km wide.
         Unit coordinates on the map can be floating point.
         """
         self._MAP_W = map_width  # Width of the map in km. Each cell is 1km
         # Visualization
-        self.scale_px = 10  # How many pixels wide each cell will be
-        self.unit_size_px = 10
+        self.scale_px = scale_px  # How many pixels wide each cell will be
+        self.unit_size_px = unit_px
         self.grid_line_thickness = 2
         self.img_h = self._MAP_W * self.scale_px
         self.img_w = self._MAP_W * self.scale_px
@@ -53,6 +53,7 @@ class GameMap:
         # Unit Map: Each channel represents a player. If 1, then the player has a unit in that cell, 0 otherwise.
         self.unit_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
         self.units = []  # List of all the units on the map
+        self._occupancy_map = None  # Stores the latest computed occupancy map
 
     def _get_cell_origins(self) -> np.ndarray:
         """Calculates the origin for each cell
@@ -138,7 +139,8 @@ class GameMap:
         not_disputed_cells = candidate_cell_pts[~disputed].astype(int)  # cell idx from coords of occupied cells
         occ_map[not_disputed_cells[:, 0], not_disputed_cells[:, 1]] = not_disputed_ids
 
-        return occ_map
+        self._occupancy_map = occ_map
+        return self._occupancy_map
 
     def _filter_disputes(self, occ_map, kdtree, disputed_cell_pts, radius_of_dispute, player_ids):
         """For each cell with multiple nearby neighbors, resolve dispute
@@ -231,8 +233,52 @@ class GameMap:
         return grid_rgb
 
 
+def pygame_main(game_map):
+    """Main loop to run pygame"""
+    s_width = game_map.img_w
+    s_height = game_map.img_h
+
+    pygame.init()
+    screen = pygame.display.set_mode((s_width, s_height))  # Main screen surface. X-right, Y-down (not numpy format)
+
+    timeout = 5000  # milliseconds
+    print(f"\nStarting pygame. Game will automatically close after {timeout}ms. Close the window to quit manually. ")
+
+    # Create an img of the map
+    occ_map = game_map.compute_occupancy_map()
+    occ_img = game_map.get_colored_grid(occ_map)
+
+    _occ_img = np.swapaxes(occ_img, 0, 1)  # Req to correct coords for pygame format
+    occ_surf = pygame.pixelcopy.make_surface(_occ_img)
+
+    running = True
+    while running:
+        dt = pygame.time.get_ticks()
+        if dt > timeout:
+            running = False
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        # For future flexibility, keep main screen separate from the map we'll draw
+        screen.fill((255, 255, 255))
+
+        # Update the map?
+
+        # Update the img surface
+        pygame.pixelcopy.array_to_surface(occ_surf, np.swapaxes(occ_img, 0, 1))
+
+        # Draw the img surface on the screen surface
+        screen.blit(occ_surf, (0, 0))
+
+        pygame.display.update()
+
+    pygame.quit()
+
+
 if __name__ == '__main__':
-    game_map = GameMap(map_width=100)
+    game_map = GameMap(map_width=10, scale_px=60, unit_px=5)
 
     # Viz grid
     game_map.add_units([Unit(0, (0.5, 0.5)),
@@ -264,7 +310,10 @@ if __name__ == '__main__':
     # Full Occupancy Grid
     occ_grid = game_map.compute_occupancy_map()
     print("\nOccupancy Grid:\n", occ_grid)
-    grid_rgb = game_map.get_colored_grid(occ_grid, draw_units=True)
+    # grid_rgb = game_map.get_colored_grid(occ_grid, draw_units=True)
     # plt.imshow(grid_rgb)
     # plt.show()
     # cv2.imwrite('images/grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
+
+    # Display in pygame
+    pygame_main(game_map)

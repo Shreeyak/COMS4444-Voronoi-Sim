@@ -2,6 +2,7 @@
 *.png
 *.jpg
 .DS_Store
+__pycache__/
 
 # Keep images directory
 !images/*
