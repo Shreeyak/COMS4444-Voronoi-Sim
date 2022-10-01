@@ -79,10 +79,10 @@ class GameMap:
                 (Does not include calculation via nearest neighbors)
         """
         # TODO: Assumes updated unit map. Make sure to update unit map after unit moves
-        # If a cell has exactly 1 unit, it's occupied. More than 1, it's contested.
-        occupied_mask = (self.unit_map.sum(axis=2) < 2)
-        occupied_mask = occupied_mask.astype(np.uint8).reshape((self._MAP_W, self._MAP_W, 1))
-        occupied_mask_2d = np.logical_and(occupied_mask, self.unit_map > 0)
+        # Get player-wise cell occupancy. If a cell has exactly 1 unit, it's occupied. More than 1, it's disputed.
+        num_units = self.unit_map.sum(axis=2)
+        occupied_mask_2d = (num_units == 1).reshape((self._MAP_W, self._MAP_W, 1))
+        occupied_mask_2d = np.logical_and(occupied_mask_2d, self.unit_map > 0)  # Shape: [N, N, 4]
 
         # 2D map that shows which cells are occupied by a player's unit. 4 means contested. 5 is uncomputed.
         occ_map = np.ones((self._MAP_W, self._MAP_W), dtype=np.uint8) * 5
@@ -90,6 +90,7 @@ class GameMap:
         occ_map[occupied_mask_2d[:, :, 1]] = 1
         occ_map[occupied_mask_2d[:, :, 2]] = 2
         occ_map[occupied_mask_2d[:, :, 3]] = 3
+        occ_map[num_units > 1] = 4
 
         return occ_map
 
