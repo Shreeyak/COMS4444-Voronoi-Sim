@@ -3,8 +3,13 @@
 ![](images/demo.gif)
 <p align="center">100x100 grid showing occupancy</p>
 
-Work in Progress. A simulator to visualize the voronoi game with
-different unit placements.
+A simulator to visualize the voronoi game with different unit placements.  
+
+Key bindings:  
+  - Esc: Quit the game.  
+  - 1-4: Select player 0-3  
+  - R: Reset game  
+  - Default Mode: Click to add unit  
 
 ## Coordinate System
 
@@ -20,7 +25,7 @@ Note: In ordinary metric cases, x is left->right. If using that system, pass met
 
 1. Blazing Fast! Uses KDTree to find nearest points for each cell.
    In a 100x100 grid with 100 units each player,
-   the occupancy is computed in 170ms. 
+   the initial occupancy is computed in 170ms. 
    ![fast](images/speed_100x100_400pts.png)
    <p align="center">Occupancy Grid: 100x100 grid with 400 random units. 170ms to compute.</p>
 

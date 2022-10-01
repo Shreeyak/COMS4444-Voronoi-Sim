@@ -15,14 +15,14 @@ def pygame_main(game_map: VoronoiGameMap):
     caption = "COMS 4444: Voronoi"
     pygame.display.set_caption(caption)
 
-    # We draw the map and a section below the map for text
+    # Add a section below the map for text
     text_h = 40  # Height of text info box
     s_width = game_map.img_w
     s_height = game_map.img_h + text_h
     screen = pygame.display.set_mode((s_width, s_height))  # Main screen surface. X-right, Y-down (not numpy format)
 
     font = pygame.font.SysFont(None, 32)
-    text_box_rect = pygame.rect.Rect(0, s_height - text_h, s_width, text_h)
+    text_box_rect = pygame.rect.Rect(0, s_height - text_h, s_width, text_h)  # Rect around text box
 
     timeout = 300000  # milliseconds
     clock = pygame.time.Clock()
