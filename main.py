@@ -3,12 +3,12 @@
 import numpy as np
 import cv2
 import matplotlib as mpl
-# import pygame
+import pygame
 import scipy
-from matplotlib import pyplot as plt
+# from matplotlib import pyplot as plt
 from typing import Tuple, List, Dict
 
-mpl.use('TkAgg')
+# mpl.use('TkAgg')
 
 
 class Unit:
@@ -234,28 +234,28 @@ class GameMap:
 if __name__ == '__main__':
     game_map = GameMap(map_width=100)
 
-    # # Viz grid
-    # game_map.add_units([Unit(0, (0.5, 0.5)),
-    #                     Unit(1, (0.5, 9.5)),
-    #                     Unit(2, (9.5, 0.5)),
-    #                     Unit(3, (9.5, 9.5)),
-    #                     Unit(0, (5.7, 5.7)),
-    #                     Unit(3, (5.3, 5.3)),
-    #                     ])
-    # # Add units that will result in multiple cells at same dist
-    # game_map.add_units([Unit(0, (0.5, 3.5)),
-    #                     Unit(1, (0.5, 5.5)),
-    #                     Unit(0, (0.5, 2.5))])
+    # Viz grid
+    game_map.add_units([Unit(0, (0.5, 0.5)),
+                        Unit(1, (0.5, 9.5)),
+                        Unit(2, (9.5, 0.5)),
+                        Unit(3, (9.5, 9.5)),
+                        Unit(0, (5.7, 5.7)),
+                        Unit(3, (5.3, 5.3)),
+                        ])
+    # Add units that will result in multiple cells at same dist
+    game_map.add_units([Unit(0, (0.5, 3.5)),
+                        Unit(1, (0.5, 5.5)),
+                        Unit(0, (0.5, 2.5))])
 
-    # Add 100 points per player randomly
-    import random
-    units = []
-    for idx in range(4):
-        for fdx in range(100):
-            units.append(
-                Unit(idx, (random.random() * 100.0, random.random() * 100.0))
-            )
-    game_map.add_units(units)
+    # # Add 100 points per player randomly
+    # import random
+    # units = []
+    # for idx in range(4):
+    #     for fdx in range(100):
+    #         units.append(
+    #             Unit(idx, (random.random() * 100.0, random.random() * 100.0))
+    #         )
+    # game_map.add_units(units)
 
     # Test - Unit-based occupancy
     unit_occ_grid = game_map.get_unit_occupied_cells()
@@ -265,7 +265,6 @@ if __name__ == '__main__':
     occ_grid = game_map.compute_occupancy_map()
     print("\nOccupancy Grid:\n", occ_grid)
     grid_rgb = game_map.get_colored_grid(occ_grid, draw_units=True)
-    plt.imshow(grid_rgb)
-    plt.show()
-
+    # plt.imshow(grid_rgb)
+    # plt.show()
     # cv2.imwrite('images/grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
