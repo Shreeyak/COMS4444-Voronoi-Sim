@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import matplotlib as mpl
 import pygame
+import scipy
 from matplotlib import pyplot as plt
 from typing import Tuple, List, Dict
 
@@ -68,9 +69,12 @@ class GameMap:
         self.units.extend(units)
         for unit in units:
             cx, cy = self.metric_to_cell(unit.pos)
-            self.unit_map[cx, cy, unit.player] = 1
+            self.unit_map[cy, cx, unit.player] = 1
+            # print("Unit Map (0):\n", self.unit_map[:, :, 0])
+            # print("/n")
 
-    def get_unit_occupied_cells(self):
+
+    def get_unit_occupied_cells(self) -> np.ndarray:
         """Calculate which cells are counted as occupied due to unit presence (based on unit map)
         If a cell contains exactly 1 unit, then it's occupied by that unit's player.
 
@@ -92,6 +96,41 @@ class GameMap:
         occ_map[occupied_mask_2d[:, :, 3]] = 3
         occ_map[num_units > 1] = 4
 
+        return occ_map
+
+    def compute_occupancy_map(self) -> np.ndarray:
+        """Calculates the occupancy status of each cell in the grid"""
+
+        # Get coords of cells that are occupied due to units inside them
+        occ_map = self.get_unit_occupied_cells()
+        occ_cell_pts = self.cell_origins[occ_map < 4]  # Shape: [N, 2]. Cells that are occupied by units pos.
+        # Get list with player id for each occ cell
+        player_ids = occ_map[occ_map < 4]  # Shape: [N,]
+
+        # Create KD-tree with all occupied cells
+        kdtree = scipy.spatial.KDTree(occ_cell_pts)
+
+        # Query points: coords of each cell that's neither occupied nor disputed
+        candidate_cell_pts = self.cell_origins[occ_map > 4]  # Shape: [N, 2]
+
+        # For each query pt, see if it is occupied or disputed
+        near_dist, near_idx = kdtree.query(candidate_cell_pts, k=2)
+
+        # Filter Disputes: Find cells with more than 1 occupied cells at same distance
+        same_d = near_dist[:, 1] - near_dist[:, 0]
+        disputed = np.isclose(same_d, 0)
+        disputed_cells = candidate_cell_pts[disputed]  # 2 cells with same dist
+        if disputed_cells.shape[0] > 0:
+            # TODO - Find all neighbors within a radius, see if more than 1 player in radius
+            pass
+
+        # For other cells, mark occupancy
+        not_disputed_ids = player_ids[near_idx[~disputed, 0]]  # Get player id of the nearest cell
+        not_disputed_cells = candidate_cell_pts[~disputed].astype(np.uint8)  # coords to cell index of occupied cells
+        occ_map[not_disputed_cells[:, 0], not_disputed_cells[:, 1]] = not_disputed_ids
+
+        # TODO: Update
+        # occ_map = np.ones((self._MAP_W, self._MAP_W), dtype=np.uint8) * 5
         return occ_map
 
     def remove_killed_units(self):
@@ -178,7 +217,7 @@ class GameMap:
                     # grid_rgb[xmin:xmax, ymin:ymax] = self.player_colors[unit.player]
 
                     # Draw Circle
-                    cv2.circle(grid_rgb, pos_px[::-1], self.unit_size_px, self.player_colors[unit.player], -1)
+                    cv2.circle(grid_rgb, pos_px, self.unit_size_px, self.player_colors[unit.player], -1)
 
         return grid_rgb
 
@@ -194,18 +233,28 @@ if __name__ == '__main__':
 
     # Viz grid
     game_map.add_units([Unit(0, (0.5, 0.5)),
-                        Unit(1, (0.5, 9.5)),
-                        Unit(2, (9.5, 0.5)),
+                        Unit(1, (9.5, 0.5)),
+                        Unit(2, (0.5, 9.5)),
                         Unit(3, (9.5, 9.5)),
                         Unit(0, (5.7, 5.7)),
-                        Unit(3, (5.3, 5.3))
+                        Unit(3, (5.3, 5.3)),
                         ])
-    unit_occ_grid = game_map.get_unit_occupied_cells()
-    print("Unit Occupancy Grid:\n", unit_occ_grid)
+    # Add units that will result in multiple cells at same dist
+    game_map.add_units([Unit(0, (3.5, 0.5)),
+                        Unit(1, (5.5, 0.5))])
 
-    grid_rgb = game_map.get_colored_grid(unit_occ_grid, draw_units=True)
+    # Unit Test - Unit-based occupancy
+    unit_occ_grid = game_map.get_unit_occupied_cells()
+    print("Test - Unit Occupancy Grid:\n", unit_occ_grid)
+    # grid_rgb = game_map.get_colored_grid(unit_occ_grid, draw_units=True)
+    # plt.imshow(grid_rgb)
+    # plt.show()
+
+    # Occupancy Grid
+    occ_grid = game_map.compute_occupancy_map()
+    print("Occupancy Grid:\n", occ_grid)
+    grid_rgb = game_map.get_colored_grid(occ_grid, draw_units=True)
     plt.imshow(grid_rgb)
     plt.show()
 
-
-    # cv2.imwrite('grid_rgb.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
+    cv2.imwrite('grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
