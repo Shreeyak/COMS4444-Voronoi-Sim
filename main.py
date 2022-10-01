@@ -3,7 +3,7 @@
 import numpy as np
 import cv2
 import matplotlib as mpl
-import pygame
+# import pygame
 import scipy
 from matplotlib import pyplot as plt
 from typing import Tuple, List, Dict
@@ -28,7 +28,7 @@ class Unit:
 
 
 class GameMap:
-    def __init__(self, map_width=100):
+    def __init__(self, map_width=1000):
         """Class for methods related to the game map.
         The map is 100x100 cells, each cell is 1km wide.
         Unit coordinates on the map can be floating point.
@@ -36,8 +36,8 @@ class GameMap:
         self._MAP_W = map_width  # Width of the map in km. Each cell is 1km
         # Visualization
         self.scale_px = 10  # How many pixels wide each cell will be
-        self.unit_size_px = 2
-        self.grid_line_thickness = 1
+        self.unit_size_px = 10
+        self.grid_line_thickness = 2
         self.img_h = self._MAP_W * self.scale_px
         self.img_w = self._MAP_W * self.scale_px
         # Colors from: https://sashamaps.net/docs/resources/20-colors/
@@ -135,7 +135,7 @@ class GameMap:
 
         # For the rest of the cells (undisputed), mark occupancy
         not_disputed_ids = player_ids[near_idx[~disputed, 0]]  # Get player id of the nearest cell
-        not_disputed_cells = candidate_cell_pts[~disputed].astype(np.uint8)  # coords to cell index of occupied cells
+        not_disputed_cells = candidate_cell_pts[~disputed].astype(int)  # cell idx from coords of occupied cells
         occ_map[not_disputed_cells[:, 0], not_disputed_cells[:, 1]] = not_disputed_ids
 
         return occ_map
@@ -164,7 +164,7 @@ class GameMap:
             else:
                 # Mark cell as contested
                 player = 4
-            disp_cell = disp_cell.astype(np.uint8)  # Shape: [2,]
+            disp_cell = disp_cell.astype(int)  # Shape: [2,]
             occ_map[disp_cell[0], disp_cell[1]] = player
 
         return occ_map
@@ -232,20 +232,30 @@ class GameMap:
 
 
 if __name__ == '__main__':
-    game_map = GameMap(map_width=10)
+    game_map = GameMap(map_width=100)
 
-    # Viz grid
-    game_map.add_units([Unit(0, (0.5, 0.5)),
-                        Unit(1, (0.5, 9.5)),
-                        Unit(2, (9.5, 0.5)),
-                        Unit(3, (9.5, 9.5)),
-                        Unit(0, (5.7, 5.7)),
-                        Unit(3, (5.3, 5.3)),
-                        ])
-    # Add units that will result in multiple cells at same dist
-    game_map.add_units([Unit(0, (0.5, 3.5)),
-                        Unit(1, (0.5, 5.5)),
-                        Unit(0, (0.5, 2.5))])
+    # # Viz grid
+    # game_map.add_units([Unit(0, (0.5, 0.5)),
+    #                     Unit(1, (0.5, 9.5)),
+    #                     Unit(2, (9.5, 0.5)),
+    #                     Unit(3, (9.5, 9.5)),
+    #                     Unit(0, (5.7, 5.7)),
+    #                     Unit(3, (5.3, 5.3)),
+    #                     ])
+    # # Add units that will result in multiple cells at same dist
+    # game_map.add_units([Unit(0, (0.5, 3.5)),
+    #                     Unit(1, (0.5, 5.5)),
+    #                     Unit(0, (0.5, 2.5))])
+
+    # Add 100 points per player randomly
+    import random
+    units = []
+    for idx in range(4):
+        for fdx in range(100):
+            units.append(
+                Unit(idx, (random.random() * 100.0, random.random() * 100.0))
+            )
+    game_map.add_units(units)
 
     # Test - Unit-based occupancy
     unit_occ_grid = game_map.get_unit_occupied_cells()

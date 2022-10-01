@@ -18,13 +18,18 @@ Note: In ordinary metric cases, x is left->right. If using that system, pass met
 
 ## Features
 
-Blazing Fast! 100x100 grid occupancy is computed within 500ms
+1. Blazing Fast! Uses KDTree to find nearest points for each cell.
+   In a 100x100 grid with 100 units each player,
+   the occupancy is computed in 170ms. For a 1000x1000 grid, it takes only
+   740ms.
+   ![fast](images/speed_100x100_400pts.png)
+   <p align="center">Occupancy Grid: 170ms to compute. 100x100 grid with 400 random units</p>
 
-1. Variable Grid Size
-2. Add Units to Grid
-3. Represent Units Placement with multi-dimensional array (N, N, 4)  
+2. Variable Grid Size
+3. Add Units to Grid
+4. Represent Units Placement with multi-dimensional array (N, N, 4)  
    Note: The history of individual units cannot be tracked.
-4. Visualize and Print Occupancy Grid. Here's a 10x10 grid:
+5. Visualize and Print Occupancy Grid. Here's a 10x10 grid:
 
 
    ![](images/grid_10x10_occupancy.png)
