@@ -1,3 +1,5 @@
+"""Try to construct graph of connected player units using delaunay triangulation
+"""
 import numpy as np
 from scipy.spatial import Delaunay
 import matplotlib.pyplot as plt
@@ -92,6 +94,14 @@ def convert_pt_for_plotting(x, y, map_size):
     return y, map_size - x
 
 
+def check_pts_within_bounds(pts: np.ndarray, pt_min: Tuple, pt_max: Tuple):
+    """Check that each point (circumcenter) is within a given bounding box"""
+    xx = (pts[:, 0] > pt_min[0]) & (pts[:, 0] < pt_max[0])
+    yy = (pts[:, 1] > pt_min[1]) & (pts[:, 1] < pt_max[1])
+    valid = xx & yy  # Shape: [n,]
+    return valid
+
+
 if __name__ == "__main__":
     # random.seed(13)
     random.seed(18)
@@ -127,23 +137,18 @@ if __name__ == "__main__":
         for idy in range(3):
             units.append(Unit(idx, (random.random() * 100.0, random.random() * 100.0)))
 
-    # Corner-case 1
+    # Corner-case 1: Enemy unit close to the boundary should cut off path b/w 2 unit, even with valid delaunay tris
+    #   connecting the 2 friendly units.
     units.append(Unit(2, (96, 40)))
     units.append(Unit(0, (94, 60)))
 
     # Construct 2 lists for passing to shapely/scipy for triangulation
-    # pts = [(u.pos[1], 100 - u.pos[0]) for u in units]  # Change axes to x-right, y-down
     pts = [(u.pos[0], u.pos[1]) for u in units]
     player_ids = [x.player for x in units]
 
-    # points = np.array([[0, 0], [0, 1.1], [0, 0.9], [0, 0.8], [1, 0], [1, 1]])  # Shape: [N, 2]
     points = np.array(pts)  # Shape: [N, 2]
     tri = Delaunay(pts)
-
-    # tri.find_simplex(p)
-
-    cc = compute_triangle_circumcenters(tri.points, tri.simplices)
-
+    # tri.find_simplex(p)  # Find simplex associated with point p
 
     edges = delaunay2edges(tri.simplices)  # Shape: [N, 2]
 
@@ -188,3 +193,26 @@ if __name__ == "__main__":
         plt.plot(x, y, marker="o", markersize=10, markeredgecolor=col, markerfacecolor=col)
 
     plt.show()
+
+    # ----- Out of Bound Circumcenters -----
+    # FAIL - We thought ignoring triangles with circumcenter outside bounds would help fix corner case 1.
+    #   Causes some points close to home base to not have an edge back to base.
+
+    # cc = compute_triangle_circumcenters(tri.points, tri.simplices)  # Shape: [N, 2]
+    # cc_mask_1d = check_pts_within_bounds(cc, (0, 0), (map_size, map_size))
+    # cc_valid = cc[cc_mask_1d, :]  # Broadcast mask to all channels
+    #
+    # simplex_valid = tri.simplices[cc_mask_1d, :]
+    # edges = delaunay2edges(simplex_valid)  # Shape: [N, 2]
+    #
+    # # Plot the out-of-bound edges
+    # simplex_out = tri.simplices[~cc_mask_1d, :]
+    # edges_out = delaunay2edges(simplex_out)  # Shape: [N, 2]
+    # for p1, p2 in edges_out:
+    #     x1, y1 = points[p1]
+    #     x2, y2 = points[p2]
+    #
+    #     x1, y1 = convert_pt_for_plotting(x1, y1, map_size)
+    #     x2, y2 = convert_pt_for_plotting(x2, y2, map_size)
+    #     plt.plot([x1, x2], [y1, y2], color='black', linestyle='dashed', alpha=0.6)
+    # ------------------------
