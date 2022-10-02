@@ -11,6 +11,14 @@ Key bindings:
   - R: Reset game  
   - Default Mode: Click to add unit  
 
+## Install
+
+Project was created with Python 3.9. Install dependencies with:
+
+```shell
+pip install -r requirements.txt
+```
+
 ## Coordinate System
 
 In order to make computation easy, our coordinate system follows numpy indexing.   
@@ -20,6 +28,7 @@ X-Axis: Top -> Bottom
 Y-Axis: Left -> Right  
 
 Note: In ordinary metric cases, x is left->right. If using that system, pass metric coords as (y, x)
+
 
 ## Features
 
