@@ -219,6 +219,8 @@ class VoronoiGameMap:
                             draw_units: bool = True):
         """Visualizes an NxN Occupancy map for the voronoi game.
         Each cell is assigned a number from 0-5: 0-3 represents a player occupying it, 4 means contested
+
+        NOTE: Occupancy map should be updated before calling this func
         """
         if occ_map is None:
             occ_map = self._occupancy_map
