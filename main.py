@@ -23,12 +23,11 @@ def pygame_main(map_size, scale_px):
     s_width = game_map.img_w
     s_height = game_map.img_h + text_h
     screen = pygame.display.set_mode((s_width, s_height))  # Main screen surface. X-right, Y-down (not numpy format)
-    screen.fill((255, 255, 255))
 
     font = pygame.font.SysFont(None, 32)
     text_box_rect = pygame.rect.Rect(0, s_height - text_h, s_width, text_h)  # Rect around text box
 
-    timeout = 300000  # milliseconds
+    timeout = 3000000  # milliseconds
     clock = pygame.time.Clock()
     print(f"\nStarting pygame. Game will automatically close after {timeout}ms. ")
     print(f"Keybindings:\n"
@@ -55,7 +54,7 @@ def pygame_main(map_size, scale_px):
     while running:
         dt = pygame.time.get_ticks()
         if dt > timeout:
-            logging.debug(f"Timeout. Quitting")
+            logging.info(f"Timeout. Quitting")
             running = False
 
         _ = clock.tick(30)  # Limit to 30fps
@@ -97,6 +96,7 @@ def pygame_main(map_size, scale_px):
         pygame.pixelcopy.array_to_surface(occ_surf, np.swapaxes(occ_img, 0, 1))
 
         # Draw the map surface on the screen surface
+        screen.fill((255, 255, 255))
         screen.blit(occ_surf, (0, 0))
 
         # Draw Info text on screen surface
