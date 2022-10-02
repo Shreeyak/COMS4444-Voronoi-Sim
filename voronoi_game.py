@@ -88,9 +88,9 @@ class VoronoiGameMap:
         self.units.extend(units)
         for unit in units:
             x, y = unit.pos
-            if not 0 <= x <= self._MAP_W:
+            if not 0 <= x < self._MAP_W:
                 raise ValueError(f"x out of range [0, {self._MAP_W}]: {x}")
-            if not 0 <= y <= self._MAP_W:
+            if not 0 <= y < self._MAP_W:
                 raise ValueError(f"y out of range [0, {self._MAP_W}]: {y}")
 
             cx, cy = int(x), int(y)
