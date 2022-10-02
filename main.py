@@ -45,6 +45,7 @@ def pygame_main(map_size, scale_px):
     curr_player = 0  # The player whose units will be modified
     info_mode = "Click to add a unit"
 
+    # TODO: Refactor with game loop design pattern: https://www.patternsgameprog.com/discover-python-and-patterns-8-game-loop-pattern/
     # TODO: Remove units with click (shift-click or change mode with key)
     # TODO: Check which units are killed on keypress
     # TODO: (Low priority) Click and drag to move units
@@ -98,6 +99,7 @@ def pygame_main(map_size, scale_px):
         # Draw the map surface on the screen surface
         screen.fill((255, 255, 255))
         screen.blit(occ_surf, (0, 0))
+
 
         # Draw Info text on screen surface
         info_text = f"Player: {curr_player}   " + info_mode

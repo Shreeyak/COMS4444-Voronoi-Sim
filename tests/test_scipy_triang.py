@@ -149,6 +149,7 @@ if __name__ == "__main__":
     points = np.array(pts)  # Shape: [N, 2]
     tri = Delaunay(pts)
     # tri.find_simplex(p)  # Find simplex associated with point p
+    # tri.neighbors[1]  # contains information about which triangles are adjacent to each other.
 
     edges = delaunay2edges(tri.simplices)  # Shape: [N, 2]
 
