@@ -9,3 +9,7 @@ __pycache__/
 
 # Ignore all of these regardless
 images/.DS_Store
+
+venv
+
+.vscode
