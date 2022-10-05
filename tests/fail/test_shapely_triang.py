@@ -1,3 +1,6 @@
+"""FAIL - triangulation works, but has same problem as scipy. Worse than scipy because we don't know simplex
+associated with each input point"""
+
 # import shapely
 import numpy as np
 from typing import Tuple
@@ -11,6 +14,8 @@ from shapely_figures import SIZE, set_limits, plot_coords, plot_bounds, plot_lin
 
 import warnings
 warnings.filterwarnings("ignore", category=shapely.errors.ShapelyDeprecationWarning)
+import matplotlib as mpl
+mpl.use('TkAgg')  # For macOS. Change engine.
 
 
 class Unit:

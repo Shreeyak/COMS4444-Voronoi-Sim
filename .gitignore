@@ -6,3 +6,6 @@ __pycache__/
 
 # Keep images directory
 !images/*
+
+# Ignore all of these regardless
+images/.DS_Store

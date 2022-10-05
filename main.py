@@ -51,6 +51,15 @@ def pygame_main(map_size, scale_px):
     # TODO: (Low priority) Click and drag to move units
     # TODO: (Low priority) Ignore multiple clicks: If multiple clicks on the exact spot, don't add a unit
 
+
+    # TODO: Voronoi diagram with all the units, map to each player and unit. Must be able to find a node/voronoi cell given
+    #  a unit ID. Create a graph from this map.
+    # TODO: BFS search from the above graph to find all nodes of a given player.
+    # TODO: Remi - replace SVG graphics with an image container
+    #       VIDEO: https://www.reddit.com/r/RemiGUI/comments/9skkag/streaming_images_from_a_webcam/
+    #
+    # TODO:
+
     running = True
     while running:
         dt = pygame.time.get_ticks()

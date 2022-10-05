@@ -1,10 +1,22 @@
 """Try to construct graph of connected player units using delaunay triangulation
+
+FAIL - It creates a nice graph, but cannot detect the invalid edges correctly.
+    We thought ignoring triangles with circumcenter outside bounds would help fix corner case 1. Does not - eg: all
+    3 points belong to the same player. Causes some points close to home base to not have an edge back to base.
+
+    Looks like one logic would be to look at the vertex opposite an edge. If the vertex is of another player, then check
+    if the edge is equal to both sides or longer than the other 2. In such a case, the edge is invalid (the enemy pt is
+    closer to the line forming edge)
 """
 import numpy as np
 from scipy.spatial import Delaunay
 import matplotlib.pyplot as plt
 from typing import Tuple
 import random
+from collections import defaultdict
+
+import matplotlib as mpl
+mpl.use('TkAgg')  # For macOS. Change engine.
 
 
 class Unit:
@@ -26,15 +38,15 @@ def delaunay2edges(tri_simplices):
     """
 
     def less_first(a, b):
-        return [a, b] if a < b else [b, a]
+        return (a, b) if a < b else (b, a)
 
-    list_of_edges = []
-
-    for triangle in tri_simplices:
+    edges_dict = defaultdict(list)  # Gives all the edges and the associated triangles
+    for idx, triangle in enumerate(tri_simplices):
         for e1, e2 in [[0, 1], [1, 2], [2, 0]]:  # for all edges of triangle
-            list_of_edges.append(less_first(triangle[e1], triangle[e2]))  # always lesser index first
+            edge = less_first(triangle[e1], triangle[e2])  # always lesser index first
+            edges_dict[edge].append(idx)  # prevent duplicates. Track associated simplexes for each edge.
 
-    array_of_edges = np.unique(list_of_edges, axis=0)  # remove duplicates
+    array_of_edges = np.array(list(edges_dict.keys()), dtype=int)
     return array_of_edges
 
 
@@ -193,27 +205,28 @@ if __name__ == "__main__":
         col = np.array((*player_colors[pl], 255)) / 255.0
         plt.plot(x, y, marker="o", markersize=10, markeredgecolor=col, markerfacecolor=col)
 
-    plt.show()
+    # plt.show()
 
     # ----- Out of Bound Circumcenters -----
     # FAIL - We thought ignoring triangles with circumcenter outside bounds would help fix corner case 1.
     #   Causes some points close to home base to not have an edge back to base.
 
-    # cc = compute_triangle_circumcenters(tri.points, tri.simplices)  # Shape: [N, 2]
-    # cc_mask_1d = check_pts_within_bounds(cc, (0, 0), (map_size, map_size))
-    # cc_valid = cc[cc_mask_1d, :]  # Broadcast mask to all channels
-    #
-    # simplex_valid = tri.simplices[cc_mask_1d, :]
-    # edges = delaunay2edges(simplex_valid)  # Shape: [N, 2]
-    #
-    # # Plot the out-of-bound edges
-    # simplex_out = tri.simplices[~cc_mask_1d, :]
-    # edges_out = delaunay2edges(simplex_out)  # Shape: [N, 2]
-    # for p1, p2 in edges_out:
-    #     x1, y1 = points[p1]
-    #     x2, y2 = points[p2]
-    #
-    #     x1, y1 = convert_pt_for_plotting(x1, y1, map_size)
-    #     x2, y2 = convert_pt_for_plotting(x2, y2, map_size)
-    #     plt.plot([x1, x2], [y1, y2], color='black', linestyle='dashed', alpha=0.6)
+    cc = compute_triangle_circumcenters(tri.points, tri.simplices)  # Shape: [N, 2]
+    cc_mask_1d = check_pts_within_bounds(cc, (0, 0), (map_size, map_size))
+    cc_valid = cc[cc_mask_1d, :]  # Broadcast mask to all channels
+
+    simplex_valid = tri.simplices[cc_mask_1d, :]
+    edges = delaunay2edges(simplex_valid)  # Shape: [N, 2]
+
+    # Plot the out-of-bound edges
+    simplex_out = tri.simplices[~cc_mask_1d, :]
+    edges_out = delaunay2edges(simplex_out)  # Shape: [N, 2]
+    for p1, p2 in edges_out:
+        x1, y1 = points[p1]
+        x2, y2 = points[p2]
+
+        x1, y1 = convert_pt_for_plotting(x1, y1, map_size)
+        x2, y2 = convert_pt_for_plotting(x2, y2, map_size)
+        plt.plot([x1, x2], [y1, y2], color='black', linestyle='dashed', alpha=0.6)
+    plt.show()
     # ------------------------

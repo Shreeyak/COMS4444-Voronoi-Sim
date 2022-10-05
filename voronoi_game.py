@@ -42,9 +42,9 @@ class VoronoiGameMap:
 
         self.home_offset = 0.5  # Home bases are offset from corner by this amt
         self.spawn_loc = {0: (self.home_offset, self.home_offset),
-                          1: (self.home_offset, self._MAP_W - self.home_offset),
+                          1: (self._MAP_W - self.home_offset, self.home_offset),
                           2: (self._MAP_W - self.home_offset, self._MAP_W - self.home_offset),
-                          3: (self._MAP_W - self.home_offset, self.home_offset)}
+                          3: (self.home_offset, self._MAP_W - self.home_offset)}
 
         # Optimization
         self._num_contested_pts_check = 10  # Number of closest points to check in case of disputed cells.
@@ -243,7 +243,8 @@ class VoronoiGameMap:
 
         if draw_major_lines:
             h, w, _ = grid_rgb.shape
-            rows, cols = 10, 10  # Only show major grid lines (100x100 lines too fine)
+            # Only show major grid lines (100x100 lines too fine) - max 10
+            cols = min(10, occ_map.shape[1])
             col_line = (0, 0, 0)
             thickness = self.grid_line_thickness
             for x in np.linspace(start=int(thickness/2), stop=w - int(thickness/2), num=cols + 1):
