@@ -155,27 +155,47 @@ if __name__ == "__main__":
     # TODO: Handle edge case where cell is occupied by 2 players: Quantize pts to grid cells.
     #   When a cell is disputed, it no longer contributes to the voronoi diagram. All the units within that cell must
     #   be removed.
+
     pts = []
     player_ids = []
     for u in units:
-        # pts.append((u.pos[1], map_size - u.pos[0]))  # Convert coord
-        pts.append(u.pos)  # Convert coord
+        # Quantization - Map unit pos to cell origin.
+        pos_cell = (int(u.pos[0]) + home_offset, int(u.pos[1]) + home_offset)
+
+        pts.append(pos_cell)  # Convert coord
         player_ids.append(u.player)
-    # points = np.array(pts)  # Shape: [N, 2]
+
+    # Get list of all pts as cell IDs - Ignore any disputed cells
+    pts_hash = {}
+    for u in units:
+        # Quantize unit pos to cell. We assume cell origin at top-left for ease of use.
+        pos_int = (int(u.pos[0]), int(u.pos[1]))
+        if pos_int in pts_hash:
+            player_existing = pts_hash[pos_int]
+            if player_existing == u.player:
+                pts_hash[pos_int] = u.player
+            else:
+                pass # Disputed cell
+        else:
+            pts_hash[pos_int] = u.player
+    pts = list(pts_hash.keys())
+    player_ids = list(pts_hash.values())
 
     # Get polygon of Voronoi regions around each pt
     _points = shapely.geometry.MultiPoint(pts)
     envelope = shapely.geometry.box(0, 0, map_size, map_size)
     vor_regions_ = shapely.ops.voronoi_diagram(_points, envelope=envelope)
     vor_regions_ = list(vor_regions_)  # Convert to a list of Polygon
-    # CLEAN the polys - they aren't being bounded correctly
+
+    # The polys aren't being bounded correctly. Fix manually.
     vor_regions = []
     for region in vor_regions_:
         if not isinstance(region, shapely.geometry.Polygon):
             print(f"WARNING: Region returned from voronoi not a polygon: {type(region)}")
 
         region_bounded = region.intersection(envelope)
-        vor_regions.append(region_bounded)
+        if region_bounded.area > 0:
+            vor_regions.append(region_bounded)
 
     # Add the home base to list of points
     pts_with_home = pts.copy()
@@ -211,12 +231,14 @@ if __name__ == "__main__":
         # Add home bases as pts
         pts_with_home.append(val)
         player_ids_with_home.append(key)
-    pts_with_home = np.array(pts_with_home)
 
-    tri = scipy.spatial.Delaunay(pts_with_home)
+    tri = scipy.spatial.Delaunay(np.array(pts_with_home))
     edges = delaunay2edges(tri.simplices)  # Shape: [N, 2]
 
     # Clean edges
+    # TODO: Handle case when enemy unit within home cell. It will cut off all player's units.
+    #  Soln: When making graph, remove edge.
+    #  Problem: How will we do a path search to home base?
     edge_player_id = []  # Player each edge belongs to
     for p1, p2 in edges:
         player1 = player_ids_with_home[p1]
