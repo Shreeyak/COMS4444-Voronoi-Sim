@@ -6,7 +6,7 @@ import logging
 import numpy as np
 import pygame
 
-from voronoi_game import VoronoiGameMap, Unit
+from voronoi_map_state import VoronoiGameMap, Unit
 
 
 def pygame_main(map_size, scale_px):

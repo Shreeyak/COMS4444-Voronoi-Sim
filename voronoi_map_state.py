@@ -53,6 +53,8 @@ class VoronoiGameMap:
         self.cell_origins = self._get_cell_origins()
         # Unit Map: Each channel represents a player. If 1, then the player has a unit in that cell, 0 otherwise.
         self.unit_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
+        self.unit_id = 1  # Unique ID for each point
+        self.unit_id_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)  # Unit pos by ID
         self.units = []  # List of all the units on the map
         self._occupancy_map = None  # Stores the latest computed occupancy map
         self.reset()
@@ -60,6 +62,8 @@ class VoronoiGameMap:
     def reset(self):
         self.units = []
         self.unit_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
+        self.unit_id_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
+        self.unit_id = 1
 
         # Game starts with 1 unit for each player in the corners
         self.add_units([Unit(0, self.spawn_loc[0]),
@@ -95,6 +99,8 @@ class VoronoiGameMap:
 
             cx, cy = int(x), int(y)
             self.unit_map[cx, cy, unit.player] = 1
+            self.unit_id_map[cx, cy, unit.player] = self.unit_id
+            self.unit_id += 1
 
     def get_unit_occupied_cells(self) -> np.ndarray:
         """Calculate which cells are counted as occupied due to unit presence (based on unit map)
