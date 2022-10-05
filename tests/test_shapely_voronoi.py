@@ -153,7 +153,8 @@ if __name__ == "__main__":
 
     # Construct 2 lists for passing to shapely/scipy for triangulation
     # TODO: Handle edge case where cell is occupied by 2 players: Quantize pts to grid cells.
-    #   Double-check: do we need this?
+    #   When a cell is disputed, it no longer contributes to the voronoi diagram. All the units within that cell must
+    #   be removed.
     pts = []
     player_ids = []
     for u in units:
@@ -251,6 +252,8 @@ if __name__ == "__main__":
     edges = edges[mask_edges]
     edge_player_id = edge_player_id[mask_edges]
 
+    # TODO: BUILD A LIST OF NEIGHBORING POLYGONS FOR EVERY POLYGON
+
     # Build a graph data structure for each player
     graphs = {0: defaultdict(list), 1: defaultdict(list), 2: defaultdict(list), 3: defaultdict(list)}
     for player, (p1, p2) in zip(edge_player_id, edges):
@@ -284,13 +287,13 @@ if __name__ == "__main__":
         plt.plot([x1, x2], [y1, y2], color=col, alpha=0.7)
 
     # Plot the invalid edges
-    for p1, p2 in edges_invalid:
-        x1, y1 = pts_with_home[p1]
-        x2, y2 = pts_with_home[p2]
-
-        # x1, y1 = convert_pt_for_plotting(x1, y1, map_size)
-        # x2, y2 = convert_pt_for_plotting(x2, y2, map_size)
-        plt.plot([x1, x2], [y1, y2], color='grey', linestyle='dashed', alpha=0.4)
+    # for p1, p2 in edges_invalid:
+    #     x1, y1 = pts_with_home[p1]
+    #     x2, y2 = pts_with_home[p2]
+    #
+    #     # x1, y1 = convert_pt_for_plotting(x1, y1, map_size)
+    #     # x2, y2 = convert_pt_for_plotting(x2, y2, map_size)
+    #     plt.plot([x1, x2], [y1, y2], color='grey', linestyle='dashed', alpha=0.4)
 
     # Plot the units
     for pt, pl in zip(pts, player_ids):
