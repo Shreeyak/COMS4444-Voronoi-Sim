@@ -98,7 +98,7 @@ def pygame_main(map_size, scale_px):
 
                 elif event.key == pygame.K_r:
                     # Reset map
-                    game_map.reset()
+                    game_map.reset_game()
                     occ_img = game_map.get_colored_occ_map()
                     logging.debug(f"Reset the map")
 

@@ -57,14 +57,19 @@ class VoronoiGameMap:
         self.unit_id_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)  # Unit pos by ID
         self.units = []  # List of all the units on the map
         self._occupancy_map = None  # Stores the latest computed occupancy map
-        self.reset()
+        self.reset_game()
 
-    def reset(self):
+    def clear_board(self):
+        """Remove all the units. Clear the associated data structures"""
         self.units = []
         self.unit_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
         self.unit_id_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
-        self.unit_id = 1
 
+
+    def reset_game(self):
+        """New Game"""
+        self.clear_board()
+        self.unit_id = 1
         # Game starts with 1 unit for each player in the corners
         self.add_units([Unit(0, self.spawn_loc[0]),
                         Unit(1, self.spawn_loc[1]),
@@ -107,8 +112,9 @@ class VoronoiGameMap:
         If a cell contains exactly 1 unit, then it's occupied by that unit's player.
 
         Returns:
-            unit_occupancy_map: 2D Map that shows which cells are occupied by each player due to unit presence.
-                (Does not include calculation via nearest neighbors)
+            unit_occupancy_map: 2D Map that shows which cells are occupied by each player due to unit presence, before
+                nearest neighbor calculations. Shape: [M, M].
+                0-3: Player. 4: Disputed. 5: Not computed
         """
         # TODO: Assumes updated unit map. Make sure to update unit map after unit moves
         # Get player-wise cell occupancy. If a cell has exactly 1 unit, it's occupied. More than 1, it's disputed.
@@ -191,11 +197,14 @@ class VoronoiGameMap:
         return occ_map
 
     def remove_killed_units(self):
-        valid_units = []
+        """Remove killed units and Recompute the occupancy map"""
+        units_ = self.units.copy()
+        self.clear_board()
+
         for unit in self.units:
             if unit.status > 0:
-                valid_units.append(unit)
-        self.units = valid_units
+                self.add_units([unit])
+        self.compute_occupancy_map()
 
     def metric_to_px(self, pos: Tuple[float, float]) -> Tuple[int, int]:
         """Convert metric unit pos to pixel location on img of grid"""
