@@ -1,6 +1,5 @@
-from typing import Tuple, List, Optional
+from typing import Tuple, List
 
-import cv2
 import matplotlib as mpl
 import numpy as np
 import scipy
@@ -25,28 +24,18 @@ class Unit:
 
 
 class VoronoiGameMap:
-    def __init__(self, map_width=100, scale_px=10, unit_px=10):
+    def __init__(self, map_size=100):
         """Class for methods related to the game map.
         The map is 100x100 cells, each cell is 1km wide.
         Unit coordinates on the map can be floating point.
         """
-        self._MAP_W = map_width  # Width of the map in km. Each cell is 1km
-        # Visualization
-        self.scale_px = scale_px  # How many pixels wide each cell will be
-        self.unit_size_px = unit_px
-        self.grid_line_thickness = 2
-        self.img_h = self._MAP_W * self.scale_px
-        self.img_w = self._MAP_W * self.scale_px
-        # Colors from: https://sashamaps.net/docs/resources/20-colors/
-        self.player_back_colors = ['#fabed4', '#ffd8b1', '#aaffc3', '#42d4f4']
-        player_colors = ['#e6194B', '#f58231', '#3cb44b', '#4363d8']
-        self.player_colors = list(map(self._hex_to_rgb, player_colors))
+        self.map_size = map_size  # Width of the map in km. Each cell is 1km
 
         self.home_offset = 0.5  # Home bases are offset from corner by this amt
         self.spawn_loc = {0: (self.home_offset, self.home_offset),
-                          1: (self._MAP_W - self.home_offset, self.home_offset),
-                          2: (self._MAP_W - self.home_offset, self._MAP_W - self.home_offset),
-                          3: (self.home_offset, self._MAP_W - self.home_offset)}
+                          1: (self.map_size - self.home_offset, self.home_offset),
+                          2: (self.map_size - self.home_offset, self.map_size - self.home_offset),
+                          3: (self.home_offset, self.map_size - self.home_offset)}
 
         # Optimization
         self._num_contested_pts_check = 10  # Number of closest points to check in case of disputed cells.
@@ -54,19 +43,21 @@ class VoronoiGameMap:
         # Data
         self.cell_origins = self._get_cell_origins()
         # Unit Map: Each channel represents a player. If 1, then the player has a unit in that cell, 0 otherwise.
-        self.unit_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
+        self.unit_map = np.zeros((self.map_size, self.map_size, 4), dtype=np.uint8)
         self.unit_id = 1  # Unique ID for each point
-        self.unit_id_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)  # Unit pos by ID
+        self.unit_id_map = np.zeros((self.map_size, self.map_size, 4), dtype=np.uint8)  # Unit pos by ID
         self.units = []  # List of all the units on the map
-        self._occupancy_map = None  # Stores the latest computed occupancy map
+        self.occupancy_map = None  # Which cells belong to which player
         self.reset_game()
+
+        # TODO: Separate func for killing units
+        #   Func that does full update
 
     def clear_board(self):
         """Remove all the units. Clear the associated data structures"""
         self.units = []
-        self.unit_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
-        self.unit_id_map = np.zeros((self._MAP_W, self._MAP_W, 4), dtype=np.uint8)
-
+        self.unit_map = np.zeros((self.map_size, self.map_size, 4), dtype=np.uint8)
+        self.unit_id_map = np.zeros((self.map_size, self.map_size, 4), dtype=np.uint8)
 
     def reset_game(self):
         """New Game"""
@@ -84,25 +75,21 @@ class VoronoiGameMap:
         Return:
             coords: Coords for each cell, indexed by cell location. np.ndarray, Shape: [100, 100, 2].
         """
-        x = np.arange(0.5, self._MAP_W, 1.0)
+        x = np.arange(0.5, self.map_size, 1.0)
         y = x.copy()
 
         xx, yy = np.meshgrid(x, y, indexing="ij")
         coords = np.stack((xx, yy), axis=-1)
         return coords
 
-    @staticmethod
-    def _hex_to_rgb(col: str = "#ffffff"):
-        return tuple(int(col.lstrip('#')[i:i + 2], 16) for i in (0, 2, 4))
-
     def add_units(self, units: List[Unit]):
         self.units.extend(units)
         for unit in units:
             x, y = unit.pos
-            if not 0 <= x < self._MAP_W:
-                raise ValueError(f"x out of range [0, {self._MAP_W}]: {x}")
-            if not 0 <= y < self._MAP_W:
-                raise ValueError(f"y out of range [0, {self._MAP_W}]: {y}")
+            if not 0 <= x < self.map_size:
+                raise ValueError(f"x out of range [0, {self.map_size}]: {x}")
+            if not 0 <= y < self.map_size:
+                raise ValueError(f"y out of range [0, {self.map_size}]: {y}")
 
             cx, cy = int(x), int(y)
 
@@ -123,11 +110,11 @@ class VoronoiGameMap:
         # TODO: Replace this is hashed unit list.
         # Get player-wise cell occupancy. If a cell has exactly 1 unit, it's occupied. More than 1, it's disputed.
         num_units = self.unit_map.sum(axis=2)
-        occupied_mask_2d = (num_units == 1).reshape((self._MAP_W, self._MAP_W, 1))
+        occupied_mask_2d = (num_units == 1).reshape((self.map_size, self.map_size, 1))
         occupied_mask_2d = np.logical_and(occupied_mask_2d, self.unit_map > 0)  # Shape: [N, N, 4]
 
         # 2D map that shows which cells are occupied by a player's unit. 4 means contested. 5 is uncomputed.
-        occ_map = np.ones((self._MAP_W, self._MAP_W), dtype=np.uint8) * 5
+        occ_map = np.ones((self.map_size, self.map_size), dtype=np.uint8) * 5
         occ_map[occupied_mask_2d[:, :, 0]] = 0
         occ_map[occupied_mask_2d[:, :, 1]] = 1
         occ_map[occupied_mask_2d[:, :, 2]] = 2
@@ -136,7 +123,7 @@ class VoronoiGameMap:
 
         return occ_map
 
-    def compute_occupancy_map(self) -> np.ndarray:
+    def compute_occupancy_map(self):
         """Calculates the occupancy status of each cell in the grid"""
 
         # Get coords of cells that are occupied due to units inside them
@@ -168,8 +155,8 @@ class VoronoiGameMap:
         not_disputed_cells = candidate_cell_pts[~disputed].astype(int)  # cell idx from coords of occupied cells
         occ_map[not_disputed_cells[:, 0], not_disputed_cells[:, 1]] = not_disputed_ids
 
-        self._occupancy_map = occ_map
-        return self._occupancy_map
+        self.occupancy_map = occ_map
+        return
 
     def _filter_disputes(self, occ_map, kdtree, disputed_cell_pts, radius_of_dispute, player_ids):
         """For each cell with multiple nearby neighbors, resolve dispute
@@ -210,82 +197,14 @@ class VoronoiGameMap:
                 self.add_units([unit])
         self.compute_occupancy_map()
 
-    def metric_to_px(self, pos: Tuple[float, float]) -> Tuple[int, int]:
-        """Convert metric unit pos to pixel location on img of grid"""
-        x, y = pos
-        if not 0 <= x <= self._MAP_W:
-            raise ValueError(f"x out of range [0, {self._MAP_W}]: {x}")
-        if not 0 <= y <= self._MAP_W:
-            raise ValueError(f"y out of range [0, {self._MAP_W}]: {y}")
-
-        px, py = map(lambda z: int(round(z * self.scale_px)), [x, y])
-        return px, py
-
-    def px_to_metric(self, pos_px: Tuple) -> Tuple[float, float]:
-        """Convert a pixel coord on map to metric"""
-        x, y = pos_px
-        if not 0 <= x <= self.img_h:
-            raise ValueError(f"x out of range [0, {self._MAP_W}]: {x}")
-        if not 0 <= y <= self.img_w:
-            raise ValueError(f"y out of range [0, {self._MAP_W}]: {y}")
-
-        px, py = map(lambda z: round(z / self.scale_px, 2), [x, y])
-        return px, py
-
-    def get_colored_occ_map(self,
-                            occ_map: Optional[np.ndarray] = None,
-                            draw_major_lines: bool = True,
-                            draw_units: bool = True):
-        """Visualizes an NxN Occupancy map for the voronoi game.
-        Each cell is assigned a number from 0-5: 0-3 represents a player occupying it, 4 means contested
-
-        NOTE: Occupancy map should be updated before calling this func
-        """
-        if occ_map is None:
-            occ_map = self._occupancy_map
-        assert len(occ_map.shape) == 2
-        assert occ_map.max() <= 5 and occ_map.min() >= 0
-
-        if occ_map.max() > 4:
-            print(f"WARNING: Occupancy status has not been computed for all cells in the grid")
-            occ_map[occ_map > 4] = 4
-
-        # Colormap
-        # Colors from https://sashamaps.net/docs/resources/20-colors/
-        cmap = mpl.colors.ListedColormap([*self.player_back_colors, '#ffffff'])
-        norm = mpl.colors.BoundaryNorm([-0.5, 0.5, 1.5, 2.5, 3.5, 4.5], 5)  # Discrete colors
-        grid_rgb = cmap(norm(occ_map))[:, :, :3]
-        grid_rgb = (grid_rgb * 255).astype(np.uint8)
-
-        # Upsample img
-        grid_rgb = cv2.resize(grid_rgb, None, fx=self.scale_px, fy=self.scale_px, interpolation=cv2.INTER_NEAREST)
-
-        if draw_major_lines:
-            h, w, _ = grid_rgb.shape
-            # Only show major grid lines (100x100 lines too fine) - max 10
-            cols = min(10, occ_map.shape[1])
-            col_line = (0, 0, 0)
-            thickness = self.grid_line_thickness
-            for x in np.linspace(start=int(thickness/2), stop=w - int(thickness/2), num=cols + 1):
-                x = int(round(x))
-                cv2.line(grid_rgb, (x, 0), (x, h), color=col_line, thickness=thickness)
-                cv2.line(grid_rgb, (0, x), (w, x), color=col_line, thickness=thickness)
-
-        if draw_units:
-            for unit in self.units:
-                if unit.status > 0:
-                    # Draw Circle for each unit
-                    pos_px = self.metric_to_px(unit.pos)
-                    cv2.circle(grid_rgb, pos_px[::-1], self.unit_size_px, self.player_colors[unit.player], -1)
-
-        return grid_rgb
-
 
 if __name__ == '__main__':
     from matplotlib import pyplot as plt
     mpl.use('TkAgg')  # For macOS. Change engine.
+    from voronoi_renderer import VoronoiRender
 
-    game_map = VoronoiGameMap(map_width=10, scale_px=60, unit_px=5)
+    game_map = VoronoiGameMap(map_size=10)
+    renderer = VoronoiRender(map_size=10, scale_px=60, unit_px=5)
 
     # Viz grid
     # Add 2 units to the same cell
@@ -311,11 +230,11 @@ if __name__ == '__main__':
     print("\nTest - Unit Occupancy Grid (5 = Not computed yet):\n", unit_occ_grid)
 
     # Full Occupancy Grid
-    occ_grid = game_map.compute_occupancy_map()
-    print("\nOccupancy Grid:\n", occ_grid)
+    game_map.compute_occupancy_map()
+    print("\nOccupancy Grid:\n", game_map.occupancy_map)
 
     # Plot and save
-    grid_rgb = game_map.get_colored_occ_map(occ_grid)
+    grid_rgb = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
     plt.imshow(grid_rgb)
     plt.show()
     # cv2.imwrite('images/grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
