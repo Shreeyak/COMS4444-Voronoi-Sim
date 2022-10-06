@@ -7,11 +7,13 @@ import numpy as np
 import pygame
 
 from voronoi_map_state import VoronoiGameMap, Unit
+from voronoi_renderer import VoronoiRender
 
 
 def pygame_main(map_size, scale_px):
     """Main loop to run pygame"""
-    game_map = VoronoiGameMap(map_width=map_size, scale_px=scale_px, unit_px=5)
+    game_state = VoronoiGameMap(map_size=map_size)
+    renderer = VoronoiRender(map_size=map_size, scale_px=scale_px, unit_px=int(scale_px/2))
 
     pygame.init()
     caption = "COMS 4444: Voronoi"
@@ -20,8 +22,8 @@ def pygame_main(map_size, scale_px):
     # pygame creates Surface objects on which it draws graphics. Surfaces can be layered on top of each other.
     # Add a section below the map for text
     text_h = 40  # Height of text info box
-    s_width = game_map.img_w
-    s_height = game_map.img_h + text_h
+    s_width = renderer.img_w
+    s_height = renderer.img_h + text_h
     screen = pygame.display.set_mode((s_width, s_height))  # Main screen surface. X-right, Y-down (not numpy format)
 
     font = pygame.font.SysFont(None, 32)
@@ -37,7 +39,8 @@ def pygame_main(map_size, scale_px):
           f"  Default Mode: Click to add units")
 
     # Create a surface for the map from initial map img
-    occ_img = game_map.get_colored_occ_map()  # Map Surface size and type is initialized from this image
+    game_state.compute_occupancy_map()
+    occ_img = renderer.get_colored_occ_map(game_state.occupancy_map, game_state.units)  # Map Surface size and type is initialized from this image
     _occ_img = np.swapaxes(occ_img, 0, 1)  # Convert coords into pygame format
     occ_surf = pygame.pixelcopy.make_surface(_occ_img)
 
@@ -99,15 +102,13 @@ def pygame_main(map_size, scale_px):
                 running = False
 
             elif event.type == pygame.MOUSEBUTTONUP:
-                if event.pos[1] > game_map.img_h:
+                if event.pos[1] > renderer.img_h:
                     continue  # Ignore clicks on the text area
 
                 # Add unit
-                pos = game_map.px_to_metric(event.pos[::-1])
-                game_map.add_units([Unit(curr_player, pos)])
-
-                _ = game_map.compute_occupancy_map()
-                occ_img = game_map.get_colored_occ_map()
+                pos = renderer.px_to_metric(event.pos[::-1])
+                game_state.add_units([Unit(curr_player, pos)])
+                game_state.compute_occupancy_map()
                 logging.debug(f"Added unit: Player: {curr_player}, Pos: {pos}")
 
             elif event.type == pygame.KEYDOWN:
@@ -122,11 +123,12 @@ def pygame_main(map_size, scale_px):
 
                 elif event.key == pygame.K_r:
                     # Reset map
-                    game_map.reset_game()
-                    occ_img = game_map.get_colored_occ_map()
+                    game_state.reset_game()
+                    game_state.compute_occupancy_map()
                     logging.debug(f"Reset the map")
 
         # Update the occ map surface
+        occ_img = renderer.get_colored_occ_map(game_state.occupancy_map, game_state.units)
         pygame.pixelcopy.array_to_surface(occ_surf, np.swapaxes(occ_img, 0, 1))
 
         # Draw the map surface on the screen surface
