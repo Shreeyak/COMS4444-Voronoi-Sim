@@ -3,6 +3,8 @@
 *.jpg
 .DS_Store
 __pycache__/
+venv
+.vscode
 
 # Keep images directory
 !images/*
