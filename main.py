@@ -6,7 +6,7 @@ import logging
 import numpy as np
 import pygame
 
-from voronoi_game import VoronoiGameMap, Unit
+from voronoi_map_state import VoronoiGameMap, Unit
 
 
 def pygame_main(map_size, scale_px):
@@ -57,8 +57,32 @@ def pygame_main(map_size, scale_px):
     # TODO: BFS search from the above graph to find all nodes of a given player.
     # TODO: Remi - replace SVG graphics with an image container
     #       VIDEO: https://www.reddit.com/r/RemiGUI/comments/9skkag/streaming_images_from_a_webcam/
-    #
-    # TODO:
+
+
+    # TODO: Design Pattern for graphics, game state, and player interface:
+    """
+    Game State - Stores a list of units, compute occupancy map, killed units. Compute new unit pos based on move
+               commands for each unit. Occupancy map and killed units can be brute force (more efficient).
+               Needs to maintain exact coords and unique ID of each unit. This is passed to players.
+                
+                Internally, maintains u
+        
+        Q: What's the use of a discretized unit map?
+               
+        Exposed to Player: List of units (player, exact pos, id). Occupancy Map. Curr/total score. Curr/total days.
+            History (units, move commands - easier motion tracking).
+                Q: Show before/after killing? No - doesn't seem useful.
+                
+        Internal: Unit cell occupancy. Occupancy Map. Move units. Connected map (kill units). History. 
+            Reset (calc game state from scratch, called after units move/are killed).
+        
+    
+    Render Graphics - Create an image out of the game state
+        Q: Separate Class? Who'd want to use that independently? Maybe when creating a strategy?
+    
+    GUI - create the user interface, allows start/stop/reset game/interactive mode.
+        Initialize player code,  log errors.
+    """
 
     running = True
     while running:
@@ -98,7 +122,7 @@ def pygame_main(map_size, scale_px):
 
                 elif event.key == pygame.K_r:
                     # Reset map
-                    game_map.reset()
+                    game_map.reset_game()
                     occ_img = game_map.get_colored_occ_map()
                     logging.debug(f"Reset the map")
 

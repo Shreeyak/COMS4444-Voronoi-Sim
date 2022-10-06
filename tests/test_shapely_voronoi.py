@@ -3,6 +3,7 @@
 # import shapely
 import numpy as np
 import random
+import warnings
 from typing import Tuple
 from collections import defaultdict
 
@@ -11,16 +12,11 @@ import shapely.errors
 import shapely.geometry
 import shapely.ops
 import scipy
-# from shapely.geometry import MultiPoint, MultiLineString, Polygon, box
-# from shapely.ops import triangulate, voronoi_diagram
-# from scipy.spatial import Delaunay, KDTree
 from matplotlib import pyplot as plt
 from descartes.patch import PolygonPatch  # plotting
 from shapely_figures import SIZE, set_limits, plot_coords, plot_bounds, plot_line, BLUE, GRAY
 
 mpl.use('TkAgg')  # For macOS. Change engine.
-
-import warnings
 warnings.filterwarnings("ignore", category=shapely.errors.ShapelyDeprecationWarning)
 
 
@@ -37,34 +33,34 @@ class Unit:
 def create_units():
     units = [
         # Corners
-        Unit(0, (1.5, 1.5)),
-        Unit(1, (8.5, 1.5)),
-        Unit(2, (8.5, 8.5)),
-        Unit(3, (1.5, 8.5)),
+        Unit(0, (15, 15)),
+        Unit(1, (85, 15)),
+        Unit(2, (85, 85)),
+        Unit(3, (15, 85)),
 
         # Middle
-        Unit(0, (5.7, 5.7)),
-        Unit(2, (5.3, 5.3)),
+        Unit(0, (57, 57)),
+        Unit(2, (53, 53)),
         # offset
-        Unit(0, (4.7, 6.7)),
-        Unit(2, (6.3, 4.3)),
+        Unit(0, (47, 67)),
+        Unit(2, (63, 43)),
 
         # Edge-case
-        Unit(1, (9.0, 6.0)),
-        Unit(2, (8.0, 4.0)),
+        Unit(1, (90, 60)),
+        Unit(2, (80, 40)),
     ]
 
     # # Scatter some points near home base of each player
-    # for idx in range(4):
-    #     units.append(Unit(0, (random.random() * 3, random.random() * 3)))
-    #     units.append(Unit(1, (10 - random.random() * 3, random.random() * 3)))
-    #     units.append(Unit(2, (10 - random.random() * 3, 10 - random.random() * 3)))
-    #     units.append(Unit(3, (random.random() * 3, 10 - random.random() * 3)))
-    #
+    # for idx in range(100):
+    #     units.append(Unit(0, (random.random() * 30, random.random() * 30)))
+    #     units.append(Unit(1, (100 - random.random() * 30, random.random() * 30)))
+    #     units.append(Unit(2, (100 - random.random() * 30, 100 - random.random() * 30)))
+    #     units.append(Unit(3, (random.random() * 3, 100 - random.random() * 30)))
+
     # # Scatter more throughout the map
     # for idx in range(4):
-    #     for idy in range(4):
-    #         units.append(Unit(idx, (random.random() * 10.0, random.random() * 10.0)))
+    #     for idy in range(20):
+    #         units.append(Unit(idx, (random.random() * 100.0, random.random() * 100.0)))
 
     # Corner-case 1: Enemy unit close to the boundary should cut off path b/w 2 unit, even with valid delaunay tris
     #   connecting the 2 friendly units.
@@ -118,10 +114,6 @@ def hex_to_rgb(col: str = "#ffffff"):
     return tuple(rgba)
 
 
-def get_shapely_centroid(poly: shapely.geometry.polygon.Polygon) -> Tuple:
-    return list(poly.centroid.coords)[0]
-
-
 if __name__ == "__main__":
     """Algo:
     - Create list of pts from units
@@ -138,7 +130,7 @@ if __name__ == "__main__":
     """
     random.seed(18)
 
-    map_size = 10
+    map_size = 100
     units = create_units()
 
     home_offset = 0.5
@@ -152,30 +144,39 @@ if __name__ == "__main__":
     player_colors = list(map(hex_to_rgb, player_colors))
 
     # Construct 2 lists for passing to shapely/scipy for triangulation
-    # TODO: Handle edge case where cell is occupied by 2 players: Quantize pts to grid cells.
+    # Handle edge case where cell is occupied by 2 players: Quantize pts to grid cells.
     #   When a cell is disputed, it no longer contributes to the voronoi diagram. All the units within that cell must
     #   be removed.
-    pts = []
-    player_ids = []
+    pts_hash = {}
     for u in units:
-        # pts.append((u.pos[1], map_size - u.pos[0]))  # Convert coord
-        pts.append(u.pos)  # Convert coord
-        player_ids.append(u.player)
-    # points = np.array(pts)  # Shape: [N, 2]
+        # Quantize unit pos to cell. We assume cell origin at center.
+        pos_int = (int(u.pos[0]) + home_offset, int(u.pos[1]) + home_offset)
+        if pos_int in pts_hash:
+            player_existing = pts_hash[pos_int]
+            if player_existing == u.player:
+                pts_hash[pos_int] = u.player
+            else:
+                pass  # Disputed cell
+        else:
+            pts_hash[pos_int] = u.player
+    pts = list(pts_hash.keys())
+    player_ids = list(pts_hash.values())
 
     # Get polygon of Voronoi regions around each pt
     _points = shapely.geometry.MultiPoint(pts)
     envelope = shapely.geometry.box(0, 0, map_size, map_size)
     vor_regions_ = shapely.ops.voronoi_diagram(_points, envelope=envelope)
     vor_regions_ = list(vor_regions_)  # Convert to a list of Polygon
-    # CLEAN the polys - they aren't being bounded correctly
+
+    # The polys aren't being bounded correctly. Fix manually.
     vor_regions = []
     for region in vor_regions_:
         if not isinstance(region, shapely.geometry.Polygon):
             print(f"WARNING: Region returned from voronoi not a polygon: {type(region)}")
 
         region_bounded = region.intersection(envelope)
-        vor_regions.append(region_bounded)
+        if region_bounded.area > 0:
+            vor_regions.append(region_bounded)
 
     # Add the home base to list of points
     pts_with_home = pts.copy()
@@ -187,16 +188,18 @@ if __name__ == "__main__":
 
     # Find mapping from pts idx to polys (via nearest unit) and poly to player
     pt_to_poly = {}  # includes home base
-    # Polygon isn't hashable, so we use polygon centroid. Because polygon is convex, centroid will be unique.
-    poly_centroid_to_player = {}
+    # Polygon isn't hashable, so we use polygon idx.
+    poly_idx_to_player = {}
     kdtree = scipy.spatial.KDTree(pts)
-    for region in vor_regions:
+    for region_idx, region in enumerate(vor_regions):
         # Voronoi regions are all convex. Nearest pt to centroid must be point belonging to region
-        centroid = get_shapely_centroid(region)
-        _, ii = kdtree.query(centroid, k=1)  # index of nearest pt
+        # centroid = region.centroid.coords[:][0]
+        # _, ii = kdtree.query(centroid, k=1)  # index of nearest pt
+        repr_pt = region.representative_point()
+        _, ii = kdtree.query(repr_pt, k=1)  # index of nearest pt
 
-        pt_to_poly[pts[ii]] = region
-        poly_centroid_to_player[centroid] = player_ids[ii]
+        pt_to_poly[pts[ii]] = region_idx
+        poly_idx_to_player[region_idx] = player_ids[ii]
 
     # Find mapping of each home base to poly
     for idx in range(4):
@@ -211,12 +214,14 @@ if __name__ == "__main__":
         # Add home bases as pts
         pts_with_home.append(val)
         player_ids_with_home.append(key)
-    pts_with_home = np.array(pts_with_home)
 
-    tri = scipy.spatial.Delaunay(pts_with_home)
+    tri = scipy.spatial.Delaunay(np.array(pts_with_home))
     edges = delaunay2edges(tri.simplices)  # Shape: [N, 2]
 
     # Clean edges
+    # TODO: Handle case when enemy unit within home cell. It will cut off all player's units.
+    #  Soln: When making graph, remove edge.
+    #  Problem: How will we do a path search to home base?
     edge_player_id = []  # Player each edge belongs to
     for p1, p2 in edges:
         player1 = player_ids_with_home[p1]
@@ -224,13 +229,15 @@ if __name__ == "__main__":
 
         valid_ = False
         if player1 == player2:
-            poly1 = pt_to_poly[tuple(pts_with_home[p1])]
-            poly2 = pt_to_poly[tuple(pts_with_home[p2])]
+            poly1_idx = pt_to_poly[tuple(pts_with_home[p1])]
+            poly2_idx = pt_to_poly[tuple(pts_with_home[p2])]
+            poly1 = vor_regions[poly1_idx]
+            poly2 = vor_regions[poly2_idx]
 
             # The polygons must both belong to the same player
             # This handles edge cases where home base is conquered by another player
-            play1_ = poly_centroid_to_player[get_shapely_centroid(poly1)]
-            play2_ = poly_centroid_to_player[get_shapely_centroid(poly2)]
+            play1_ = poly_idx_to_player[poly1_idx]
+            play2_ = poly_idx_to_player[poly2_idx]
 
             are_neighbors = poly_are_neighbors(poly1, poly2)
             if are_neighbors and play1_ == player1 and play2_ == player1:
@@ -265,51 +272,51 @@ if __name__ == "__main__":
     # TODO: From each home base, traverse the full graph
 
 
-    # Plot
-    fig = plt.figure(1, figsize=SIZE, dpi=90)
-    fig.set_frameon(True)
-    ax = fig.add_subplot(111)
-    # set_limits(ax, 0, map_size, 0, map_size)
+    create_plot = True
+    if create_plot:
+        # Plot
+        fig = plt.figure(1, figsize=SIZE, dpi=90)
+        fig.set_frameon(True)
+        ax = fig.add_subplot(111)
+        # set_limits(ax, 0, map_size, 0, map_size)
 
-    for poly in vor_regions:
-        player_ = poly_centroid_to_player[get_shapely_centroid(poly)]
-        patch = PolygonPatch(poly, facecolor=player_colors[player_], alpha=0.3, zorder=-1)  # edgecolor=BLUE
-        ax.add_patch(patch)
+        for idx, poly in enumerate(vor_regions):
+            player_ = poly_idx_to_player[idx]
+            patch = PolygonPatch(poly, facecolor=player_colors[player_], alpha=0.3, zorder=-1)  # edgecolor=BLUE
+            ax.add_patch(patch)
 
-    # Plot the valid edges
-    for (p1, p2), pl in zip(edges, edge_player_id):
-        x1, y1 = pts_with_home[p1]
-        x2, y2 = pts_with_home[p2]
+        # Plot the valid edges
+        for (p1, p2), pl in zip(edges, edge_player_id):
+            x1, y1 = pts_with_home[p1]
+            x2, y2 = pts_with_home[p2]
 
-        # x1, y1 = convert_pt_for_plotting(x1, y1, map_size)
-        # x2, y2 = convert_pt_for_plotting(x2, y2, map_size)
-        col = np.array(player_colors[pl])
-        plt.plot([x1, x2], [y1, y2], color=col, alpha=0.7)
+            # x1, y1 = convert_pt_for_plotting(x1, y1, map_size)
+            # x2, y2 = convert_pt_for_plotting(x2, y2, map_size)
+            col = np.array(player_colors[pl])
+            plt.plot([x1, x2], [y1, y2], color=col, alpha=0.7)
 
-    # Plot the invalid edges
-    # for p1, p2 in edges_invalid:
-    #     x1, y1 = pts_with_home[p1]
-    #     x2, y2 = pts_with_home[p2]
-    #
-    #     # x1, y1 = convert_pt_for_plotting(x1, y1, map_size)
-    #     # x2, y2 = convert_pt_for_plotting(x2, y2, map_size)
-    #     plt.plot([x1, x2], [y1, y2], color='grey', linestyle='dashed', alpha=0.4)
+        # Plot the invalid edges
+        # for p1, p2 in edges_invalid:
+        #     x1, y1 = pts_with_home[p1]
+        #     x2, y2 = pts_with_home[p2]
+        #
+        #     # x1, y1 = convert_pt_for_plotting(x1, y1, map_size)
+        #     # x2, y2 = convert_pt_for_plotting(x2, y2, map_size)
+        #     plt.plot([x1, x2], [y1, y2], color='grey', linestyle='dashed', alpha=0.4)
 
-    # Plot the units
-    for pt, pl in zip(pts, player_ids):
-        x, y = pt
+        # Plot the units
+        for pt, pl in zip(pts, player_ids):
+            x, y = pt
 
-        # x, y = convert_pt_for_plotting(x, y, map_size)
-        col = np.array(player_colors[pl])
-        plt.plot(x, y, marker="o", markersize=10, markeredgecolor=col, markerfacecolor=col)
+            # x, y = convert_pt_for_plotting(x, y, map_size)
+            col = np.array(player_colors[pl])
+            plt.plot(x, y, marker="o", markersize=10, markeredgecolor=col, markerfacecolor=col)
 
-    # Plot the home base
-    for pt, pl in zip(pts_with_home[-4:], player_ids_with_home[-4:]):
-        x, y = pt
-        # x, y = convert_pt_for_plotting(x, y, map_size)
-        col = np.array(player_colors[pl])
-        plt.plot(x, y, marker="x", markersize=14, markeredgecolor=col, markerfacecolor=col)
+        # Plot the home base
+        for pt, pl in zip(pts_with_home[-4:], player_ids_with_home[-4:]):
+            x, y = pt
+            # x, y = convert_pt_for_plotting(x, y, map_size)
+            col = np.array(player_colors[pl])
+            plt.plot(x, y, marker="x", markersize=14, markeredgecolor=col, markerfacecolor=col)
 
-    plt.show()
-
-
+        plt.show()
