@@ -149,7 +149,7 @@ if __name__ == "__main__":
     #   be removed.
     pts_hash = {}
     for u in units:
-        # Quantize unit pos to cell. We assume cell origin at top-left for ease of use.
+        # Quantize unit pos to cell. We assume cell origin at center.
         pos_int = (int(u.pos[0]) + home_offset, int(u.pos[1]) + home_offset)
         if pos_int in pts_hash:
             player_existing = pts_hash[pos_int]
