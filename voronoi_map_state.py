@@ -1,3 +1,4 @@
+from collections import deque
 from typing import Tuple, List
 
 import matplotlib as mpl
@@ -86,7 +87,7 @@ class VoronoiGameMap:
             unit_occupancy_map: Shape: [N, N]. Maps cells to players/dispute, before nearest neighbor calculations.
                 0-3: Player. 4: Disputed. 5: Not computed
         """
-        occ_map = np.ones((self.map_size, self.map_size), dtype=np.uint8) * 4  # 0-3 = player
+        occ_map = np.ones((self.map_size, self.map_size), dtype=np.uint8) * 5  # 0-3 = player, 5 = not computed
 
         pts_hash = {}
         for player, pl_units in self.units.items():
@@ -102,20 +103,29 @@ class VoronoiGameMap:
 
         return occ_map
 
-    def compute_occupancy_map(self):
-        """Calculates the occupancy status of each cell in the grid"""
+    def compute_occupancy_map(self, mask_grid_pos: np.ndarray = None):
+        """Calculates the occupancy status of each cell in the grid
+
+        Args:
+            mask_grid_pos: Shape: [N, N]. If provided, only occupancy of these cells will be computed.
+                Used when updating occupancy map.
+        """
 
         # Which cells contain units
         occ_map = self.get_unit_occupied_cells()
-        mask = occ_map < 4
-        occ_cell_pts = self.cell_origins[mask]  # list of unit
-        player_ids = occ_map[mask]  # Shape: [N,]. player id for each occ cell
+        occ_cell_pts = self.cell_origins[occ_map < 4]  # list of unit
+        player_ids = occ_map[occ_map < 4]  # Shape: [N,]. player id for each occ cell
 
         # Create KD-tree with all occupied cells
         kdtree = scipy.spatial.KDTree(occ_cell_pts)
 
-        # Query points: coords of each cell that's not occupied
-        candidate_cell_pts = self.cell_origins[~mask]  # Shape: [N, 2]
+        # Query points: coords of each cell whose occupancy is not computed yet
+        if mask_grid_pos is None:
+            mask = (occ_map > 4)
+        else:
+            mask = (occ_map > 4) & mask_grid_pos
+            occ_map = self.occupancy_map  # Update existing map
+        candidate_cell_pts = self.cell_origins[mask]  # Shape: [N, 2]
 
         # For each query pt, get associated player (nearest cell with unit)
         # Find nearest 2 points to identify if multiple cells at same dist
@@ -167,16 +177,77 @@ class VoronoiGameMap:
 
         return occ_map
 
-    def remove_killed_units(self):
-        """Remove killed units and Recompute the occupancy map"""
-        # bfs search, update self.units
-        # self.compute_occupancy_map()
-        raise NotImplementedError
+    def get_connectivity_map(self):
+        """Map of all cells that have a path to their respective home base
+        Uses a brute-force BFS search for each player, from their home base out through the occupancy map
+        """
+        occ_map = self.occupancy_map
+        connected = np.ones_like(occ_map) * 4  # Default = disputed/empty
+
+        for player in range(4):
+            que = deque()
+            reached = set()
+
+            start = self.spawn_loc[player]
+            start = (int(start[1]), int(start[0]))
+            que.append(start)
+
+            occ_map_ = (occ_map == player)
+            while len(que) > 0:
+                ele = que.popleft()
+
+                if occ_map_[ele]:
+                    connected[ele] = player
+
+                    # neighbors - iter
+                    ymin = max(0, ele[0] - 1)
+                    ymax = min(connected.shape[0] - 1, ele[0] + 1)
+                    xmin = max(0, ele[1] - 1)
+                    xmax = min(connected.shape[1] - 1, ele[1] + 1)
+                    neigh = []
+                    for y in range(ymin, ymax + 1):
+                        for x in range(xmin, xmax + 1):
+                            neigh.append((y, x))
+
+                    for n in neigh:
+                        if n not in reached:
+                            que.append(n)
+                            reached.add(n)
+
+        return connected
+
+    def remove_killed_units(self) -> List[Tuple]:
+        """Remove killed units and recompute the occupancy map
+        Returns:
+            killed unit list: (player, (x, y), id)
+        """
+        killed_units = []
+        connectivity_map = self.get_connectivity_map()
+        for player, unit_dict in self.units.items():
+            for id, pos in unit_dict.items():
+                pos_grid = (int(pos[1]), int(pos[0]))
+                if not connectivity_map[pos_grid] == player:
+                    killed_units.append((player, pos, id))
+
+        # Remove isolated units from unit list
+        for player, pos, id in killed_units:
+            self.units[player].pop(id)
+
+        # Update the occupancy map
+        self.compute_occupancy_map(connectivity_map > 3)
+        return killed_units
+
+    def update(self):
+        """Update the map (after modifying units)"""
+        self.compute_occupancy_map()
+        self.remove_killed_units()
 
 
 if __name__ == '__main__':
+    import cv2
     from matplotlib import pyplot as plt
     mpl.use('TkAgg')  # For macOS. Change engine.
+
     from voronoi_renderer import VoronoiRender
 
     game_map = VoronoiGameMap(map_size=10)
@@ -205,12 +276,29 @@ if __name__ == '__main__':
     unit_occ_grid = game_map.get_unit_occupied_cells()
     print("\nTest - Unit Occupancy Grid (5 = Not computed yet):\n", unit_occ_grid)
 
-    # Full Occupancy Grid
+    # Test - Occupancy Grid before killing
     game_map.compute_occupancy_map()
-    print("\nOccupancy Grid:\n", game_map.occupancy_map)
+    print("\nOccupancy Grid (before killing units):\n", game_map.occupancy_map)
+
+    grid_rgb = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
+
+    # Test - Remove killed units
+    connectivity_map = game_map.get_connectivity_map()
+    grid_rgb_c = renderer.get_colored_occ_map(connectivity_map, game_map.units)
+    killed_units = game_map.remove_killed_units()
+    grid_rgb_k = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
+    # Plot killed units
+    for player, pos, _ in killed_units:
+        pos_px = renderer.metric_to_px(pos)
+        cv2.circle(grid_rgb_k, pos_px, renderer.unit_size_px, (0, 0, 0), -1)
 
     # Plot and save
-    grid_rgb = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
-    plt.imshow(grid_rgb)
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+    ax1.imshow(grid_rgb)
+    ax2.imshow(grid_rgb_c)
+    ax3.imshow(grid_rgb_k)
+    ax1.set_title("Occupancy before kill")
+    ax2.set_title("Connectivity")
+    ax3.set_title("Occupancy after kill")
     plt.show()
     # cv2.imwrite('images/grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
