@@ -50,6 +50,7 @@ class VoronoiInterface:
         self.curr_player = 0  # The player whose units will be modified
         self.reset = False
         self.add_unit = None
+        self.kill_units = False
 
     def process_input(self):
         """Handle user inputs: events such as mouse clicks and key presses"""
@@ -79,6 +80,9 @@ class VoronoiInterface:
                     self.curr_player = pl_map[event.key]
                     logging.debug(f"Player set to: {self.curr_player}")
 
+                elif event.key == pygame.K_k:
+                    self.kill_units = True
+
                 elif event.key == pygame.K_r:
                     # Reset map
                     self.reset = True
@@ -98,6 +102,10 @@ class VoronoiInterface:
             self.game_state.add_units([(self.curr_player, self.add_unit)])
             self.game_state.compute_occupancy_map()
             self.add_unit = None
+
+        if self.kill_units:
+            self.game_state.update()
+            self.kill_units = False
 
     def render(self):
         # self.screen.fill((255, 255, 255))  # Blank screen
