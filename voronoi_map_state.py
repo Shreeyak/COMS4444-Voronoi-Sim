@@ -86,7 +86,7 @@ class VoronoiGameMap:
             unit_occupancy_map: Shape: [N, N]. Maps cells to players/dispute, before nearest neighbor calculations.
                 0-3: Player. 4: Disputed. 5: Not computed
         """
-        occ_map = np.ones((self.map_size, self.map_size), dtype=np.uint8) * 4  # 0-3 = player
+        occ_map = np.ones((self.map_size, self.map_size), dtype=np.uint8) * 5  # 0-3 = player, 5 = not computed
 
         pts_hash = {}
         for player, pl_units in self.units.items():
@@ -107,15 +107,14 @@ class VoronoiGameMap:
 
         # Which cells contain units
         occ_map = self.get_unit_occupied_cells()
-        mask = occ_map < 4
-        occ_cell_pts = self.cell_origins[mask]  # list of unit
-        player_ids = occ_map[mask]  # Shape: [N,]. player id for each occ cell
+        occ_cell_pts = self.cell_origins[occ_map < 4]  # list of unit
+        player_ids = occ_map[occ_map < 4]  # Shape: [N,]. player id for each occ cell
 
         # Create KD-tree with all occupied cells
         kdtree = scipy.spatial.KDTree(occ_cell_pts)
 
-        # Query points: coords of each cell that's not occupied
-        candidate_cell_pts = self.cell_origins[~mask]  # Shape: [N, 2]
+        # Query points: coords of each cell whose occupancy is not computed yet
+        candidate_cell_pts = self.cell_origins[occ_map > 4]  # Shape: [N, 2]
 
         # For each query pt, get associated player (nearest cell with unit)
         # Find nearest 2 points to identify if multiple cells at same dist
