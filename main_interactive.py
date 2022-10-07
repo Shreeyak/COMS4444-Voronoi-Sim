@@ -118,7 +118,7 @@ class VoronoiInterface:
         self.text_box_surf.fill((255, 255, 255))  # White background for text
         box_rect = self.text_box_surf.get_rect()
 
-        info_text = f"Day: {0}, Player: {self.curr_player}"
+        info_text = f"Player Selected: {self.curr_player}"
         color = (0, 0, 0)
         text_surf = self.font.render(info_text, True, color)
         text_rect = text_surf.get_rect(center=box_rect.center)  # Position surface at center of text box
@@ -133,7 +133,8 @@ class VoronoiInterface:
               f"  Esc: Quit the game.\n"
               f"  1-4: Select player 0-3\n"
               f"  R: Reset game\n"
-              f"Default Mode: Click to add units")
+              f"  K: Kill isolated units\n"
+              f"Interactive Mode: Click to add units")
 
         while self.running:
             self.process_input()
