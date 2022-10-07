@@ -266,10 +266,8 @@ if __name__ == '__main__':
     # import random
     # units = []
     # for idx in range(4):
-    #     for fdx in range(100):
-    #         units.append(
-    #             Unit(idx, (random.random() * 100.0, random.random() * 100.0))
-    #         )
+    #     for fdx in range(10):
+    #         units.append((idx, (random.random() * 10.0, random.random() * 10.0)))
     # game_map.add_units(units)
 
     # Test - Unit-based occupancy
