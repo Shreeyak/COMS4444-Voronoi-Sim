@@ -237,6 +237,11 @@ class VoronoiGameMap:
         self.compute_occupancy_map(connectivity_map > 3)
         return killed_units
 
+    def update(self):
+        """Update the map (after modifying units)"""
+        self.compute_occupancy_map()
+        self.remove_killed_units()
+
 
 if __name__ == '__main__':
     import cv2
@@ -271,20 +276,19 @@ if __name__ == '__main__':
     unit_occ_grid = game_map.get_unit_occupied_cells()
     print("\nTest - Unit Occupancy Grid (5 = Not computed yet):\n", unit_occ_grid)
 
-    # Full Occupancy Grid
+    # Test - Occupancy Grid before killing
     game_map.compute_occupancy_map()
     print("\nOccupancy Grid (before killing units):\n", game_map.occupancy_map)
 
     grid_rgb = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
 
-    # Remove killed unit
+    # Test - Remove killed units
     connectivity_map = game_map.get_connectivity_map()
     grid_rgb_c = renderer.get_colored_occ_map(connectivity_map, game_map.units)
     killed_units = game_map.remove_killed_units()
     grid_rgb_k = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
     # Plot killed units
     for player, pos, _ in killed_units:
-        # Draw Circle for each unit
         pos_px = renderer.metric_to_px(pos)
         cv2.circle(grid_rgb_k, pos_px, renderer.unit_size_px, (0, 0, 0), -1)
 
