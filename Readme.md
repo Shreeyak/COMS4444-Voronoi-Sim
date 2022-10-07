@@ -4,12 +4,19 @@
 <p align="center">100x100 grid showing occupancy</p>
 
 A simulator to visualize the voronoi game with different unit placements.  
+Click to add units
 
 Key bindings:  
   - Esc: Quit the game.  
   - 1-4: Select player 0-3  
-  - R: Reset game  
-  - Default Mode: Click to add unit  
+  - R: Reset game
+  - K: Kill isolated units  
+
+#### Launch:
+
+```shell
+python main_interactive.py [-m <map_size>]
+```
 
 ## Install
 
@@ -35,8 +42,7 @@ Note: Y-axes represents columns. So a unit at `location[10, 30]` is at `cell[30,
    ![fast](images/speed_100x100_400pts.png)
    <p align="center">Occupancy Grid: 100x100 grid with 400 random units. 170ms to compute.</p>
 
-2. Variable Grid Size
-3. Add Units to Grid
+2. Variable Grid Size - Visualize different strategies easily
 
 
 ## Dev thoughts
