@@ -1,4 +1,4 @@
-from typing import Tuple, List, Optional
+from typing import Dict, Tuple, List, Optional
 
 import cv2
 import matplotlib as mpl
@@ -47,7 +47,7 @@ class VoronoiRender:
         """Convert a pixel coord on map to metric
         Note: Pixels are in (row, col) format, transpose of XY Axes.
         """
-        py, px = pos_px
+        px, py = pos_px
         if not 0 <= px <= self.img_h:
             raise ValueError(f"x out of range [0, {self.map_size}]: {px}")
         if not 0 <= py <= self.img_w:
@@ -59,17 +59,15 @@ class VoronoiRender:
     # noinspection PyArgumentList
     def get_colored_occ_map(self,
                             occ_map: np.ndarray,
-                            units: Optional[List],
-                            draw_major_lines: bool = True,
-                            draw_units: bool = True):
+                            units: Optional[Dict[int, Dict]] = None,
+                            draw_major_lines: bool = True):
         """Visualizes an NxN Occupancy map for the voronoi game.
 
         Args:
             occ_map: Occupancy map. Shape: [n, n].
                 Each cell is assigned a number from 0-4: 0-3 represents a player occupying it, 4 means contested
-            units: List of units (player and pos)
+            units: If provided, will draw them on the map. Dict of units per player: {player: {id: (pos)}}.
             draw_major_lines: Draw grid lines
-            draw_units: Draw units
 
         Return:
             np.ndarray: The RGB image representing game state
@@ -100,11 +98,11 @@ class VoronoiRender:
                 cv2.line(grid_rgb, (x, 0), (x, h), color=col_line, thickness=thickness)
                 cv2.line(grid_rgb, (0, x), (w, x), color=col_line, thickness=thickness)
 
-        if draw_units:
-            for unit in units:
-                if unit.status > 0:
+        if units is not None:
+            for player, unit_dict in units.items():
+                for pos in unit_dict.values():
                     # Draw Circle for each unit
-                    pos_px = self.metric_to_px(unit.pos)
-                    cv2.circle(grid_rgb, pos_px[::-1], self.unit_size_px, self.player_colors[unit.player], -1)
+                    pos_px = self.metric_to_px(pos)
+                    cv2.circle(grid_rgb, pos_px, self.unit_size_px, self.player_colors[player], -1)
 
         return grid_rgb

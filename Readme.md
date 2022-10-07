@@ -41,6 +41,9 @@ Note: Y-axes represents columns. So a unit at `location[10, 30]` is at `cell[30,
 
 ## Dev thoughts
 
+- TODO: Game engine that tracks days, movements, etc. Uses voronoi state.
+The interactive mode can be a different engine.
+
 - TODO: Remove units with click (shift-click or change mode with key)
 - TODO: Check which units are killed on keypress
 - TODO: (Low priority) Click and drag to move units

@@ -6,7 +6,7 @@ import logging
 import numpy as np
 import pygame
 
-from voronoi_map_state import VoronoiGameMap, Unit
+from voronoi_map_state import VoronoiGameMap
 from voronoi_renderer import VoronoiRender
 
 
@@ -92,9 +92,10 @@ class VoronoiInterface:
 
         if self.reset:
             self.game_state.reset_game()
+            self.reset = False
 
         if self.add_unit is not None:
-            self.game_state.add_units([Unit(self.curr_player, self.add_unit)])
+            self.game_state.add_units([(self.curr_player, self.add_unit)])
             self.game_state.compute_occupancy_map()
             self.add_unit = None
 

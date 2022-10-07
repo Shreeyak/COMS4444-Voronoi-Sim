@@ -5,22 +5,18 @@ import numpy as np
 import scipy
 
 
-class Unit:
-    def __init__(self, player: int, pos: Tuple):
-        """The unit of each player. New unit spawns every N days. Can be moved in any direction by 1 km"""
-        assert 0 <= player < 4
+def _compute_cell_coords(map_size) -> np.ndarray:
+    """Calculates the origin for each cell.
+    Each cell is 1km wide and origin is in the center.
 
-        self.player = int(player)
-        self.pos = pos
-        self.status = 1  # 1 = alive, 0 = dead
-
-        # TODO: Replace usage with list of tuples. Faster.
-
-    def kill(self):
-        self.status = 0
-
-    def move(self):
-        raise NotImplementedError
+    Return:
+        coords: Shape: [100, 100, 2]. Coords for each cell in grid.
+    """
+    x = np.arange(0.5, map_size, 1.0)
+    y = x
+    xx, yy = np.meshgrid(x, y, indexing="ij")
+    coords = np.stack((xx, yy), axis=-1)
+    return coords
 
 
 class VoronoiGameMap:
@@ -33,115 +29,99 @@ class VoronoiGameMap:
 
         self.home_offset = 0.5  # Home bases are offset from corner by this amt
         self.spawn_loc = {0: (self.home_offset, self.home_offset),
-                          1: (self.map_size - self.home_offset, self.home_offset),
+                          1: (self.home_offset, self.map_size - self.home_offset),
                           2: (self.map_size - self.home_offset, self.map_size - self.home_offset),
-                          3: (self.home_offset, self.map_size - self.home_offset)}
+                          3: (self.map_size - self.home_offset, self.home_offset),}
 
         # Optimization
         self._num_contested_pts_check = 10  # Number of closest points to check in case of disputed cells.
 
         # Data
-        self.cell_origins = self._get_cell_origins()
-        # Unit Map: Each channel represents a player. If 1, then the player has a unit in that cell, 0 otherwise.
-        self.unit_map = np.zeros((self.map_size, self.map_size, 4), dtype=np.uint8)
-        self.unit_id = 1  # Unique ID for each point
-        self.unit_id_map = np.zeros((self.map_size, self.map_size, 4), dtype=np.uint8)  # Unit pos by ID
-        self.units = []  # List of all the units on the map
+        self.cell_origins = _compute_cell_coords(self.map_size)
+        self.unit_id = 1  # Unique ID for each new point
+        self.units = {0: {}, 1: {}, 2: {}, 3: {}}  # {player: {id: (x, y)}}
         self.occupancy_map = None  # Which cells belong to which player
+
         self.reset_game()
 
         # TODO: Separate func for killing units
         #   Func that does full update
 
-    def clear_board(self):
-        """Remove all the units. Clear the associated data structures"""
-        self.units = []
-        self.unit_map = np.zeros((self.map_size, self.map_size, 4), dtype=np.uint8)
-        self.unit_id_map = np.zeros((self.map_size, self.map_size, 4), dtype=np.uint8)
+    def add_units(self, units: List[Tuple[int, Tuple[float, float]]]):
+        """Add some units to the map
 
-    def reset_game(self):
-        """New Game"""
-        self.clear_board()
-        self.unit_id = 1
-        # Game starts with 1 unit for each player in the corners
-        self.add_units([Unit(0, self.spawn_loc[0]),
-                        Unit(1, self.spawn_loc[1]),
-                        Unit(2, self.spawn_loc[2]),
-                        Unit(3, self.spawn_loc[3])])
-        self.compute_occupancy_map()
-
-    def _get_cell_origins(self) -> np.ndarray:
-        """Calculates the origin for each cell
-        Return:
-            coords: Coords for each cell, indexed by cell location. np.ndarray, Shape: [100, 100, 2].
+        Args:
+            units: List of units to be added to the map. Elements are tuple -> (player, (x, y))
         """
-        x = np.arange(0.5, self.map_size, 1.0)
-        y = x.copy()
-
-        xx, yy = np.meshgrid(x, y, indexing="ij")
-        coords = np.stack((xx, yy), axis=-1)
-        return coords
-
-    def add_units(self, units: List[Unit]):
-        self.units.extend(units)
-        for unit in units:
-            x, y = unit.pos
+        for (player, pos) in units:
+            x, y = pos
             if not 0 <= x < self.map_size:
                 raise ValueError(f"x out of range [0, {self.map_size}]: {x}")
             if not 0 <= y < self.map_size:
                 raise ValueError(f"y out of range [0, {self.map_size}]: {y}")
+            if not (0 <= player <= 3):
+                raise ValueError(f"Player ID must be in range [0, 3]: {player}")
 
-            cx, cy = int(x), int(y)
-
-            # TODO: Separate func to compute unit map
-            self.unit_map[cx, cy, unit.player] = 1
-            self.unit_id_map[cx, cy, unit.player] = self.unit_id
+            self.units[player][self.unit_id] = pos  # have a unique ID for each unit on the map
             self.unit_id += 1
 
+    def spawn_home_units(self):
+        """Create a unit for each player at home base"""
+        units = [x for x in self.spawn_loc.items()]
+        self.add_units(units)
+
+    def reset_game(self):
+        """New Game"""
+        self.unit_id = 1
+        self.units = {0: {}, 1: {}, 2: {}, 3: {}}
+
+        # Game starts with 1 unit for each player in the corners
+        self.spawn_home_units()
+        self.compute_occupancy_map()
+
     def get_unit_occupied_cells(self) -> np.ndarray:
-        """Calculate which cells are counted as occupied due to unit presence (based on unit map)
-        If a cell contains exactly 1 unit, then it's occupied by that unit's player.
+        """Colculate which cells contain units and are occupied/disputed
 
         Returns:
-            unit_occupancy_map: 2D Map that shows which cells are occupied by each player due to unit presence, before
-                nearest neighbor calculations. Shape: [M, M].
+            unit_occupancy_map: Shape: [N, N]. Maps cells to players/dispute, before nearest neighbor calculations.
                 0-3: Player. 4: Disputed. 5: Not computed
         """
-        # TODO: Replace this is hashed unit list.
-        # Get player-wise cell occupancy. If a cell has exactly 1 unit, it's occupied. More than 1, it's disputed.
-        num_units = self.unit_map.sum(axis=2)
-        occupied_mask_2d = (num_units == 1).reshape((self.map_size, self.map_size, 1))
-        occupied_mask_2d = np.logical_and(occupied_mask_2d, self.unit_map > 0)  # Shape: [N, N, 4]
+        occ_map = np.ones((self.map_size, self.map_size), dtype=np.uint8) * 4  # 0-3 = player
 
-        # 2D map that shows which cells are occupied by a player's unit. 4 means contested. 5 is uncomputed.
-        occ_map = np.ones((self.map_size, self.map_size), dtype=np.uint8) * 5
-        occ_map[occupied_mask_2d[:, :, 0]] = 0
-        occ_map[occupied_mask_2d[:, :, 1]] = 1
-        occ_map[occupied_mask_2d[:, :, 2]] = 2
-        occ_map[occupied_mask_2d[:, :, 3]] = 3
-        occ_map[num_units > 1] = 4
+        pts_hash = {}
+        for player, pl_units in self.units.items():
+            for (x, y) in pl_units.values():
+                pos_grid = (int(y), int(x))  # Quantize unit pos to cell idx
+                if pos_grid not in pts_hash:
+                    pts_hash[pos_grid] = player
+                    occ_map[pos_grid] = player
+                else:
+                    player_existing = pts_hash[pos_grid]
+                    if player_existing != player:  # Same cell, multiple players
+                        occ_map[pos_grid] = 4
 
         return occ_map
 
     def compute_occupancy_map(self):
         """Calculates the occupancy status of each cell in the grid"""
 
-        # Get coords of cells that are occupied due to units inside them
+        # Which cells contain units
         occ_map = self.get_unit_occupied_cells()
-        occ_cell_pts = self.cell_origins[occ_map < 4]  # Shape: [N, 2]. Cells that are occupied by units pos.
-        # Get list with player id for each occ cell
-        player_ids = occ_map[occ_map < 4]  # Shape: [N,]
+        mask = occ_map < 4
+        occ_cell_pts = self.cell_origins[mask]  # list of unit
+        player_ids = occ_map[mask]  # Shape: [N,]. player id for each occ cell
 
         # Create KD-tree with all occupied cells
         kdtree = scipy.spatial.KDTree(occ_cell_pts)
 
-        # Query points: coords of each cell that's neither occupied nor disputed
-        candidate_cell_pts = self.cell_origins[occ_map > 4]  # Shape: [N, 2]
+        # Query points: coords of each cell that's not occupied
+        candidate_cell_pts = self.cell_origins[~mask]  # Shape: [N, 2]
 
-        # For each query pt, see if it is occupied or disputed
+        # For each query pt, get associated player (nearest cell with unit)
+        # Find nearest 2 points to identify if multiple cells at same dist
         near_dist, near_idx = kdtree.query(candidate_cell_pts, k=2)
 
-        # Filter Disputes: Find cells with more than 1 occupied cells at same distance
+        # Resolve disputes for cells with more than 1 occupied cells at same distance
         same_d = near_dist[:, 1] - near_dist[:, 0]
         disputed = np.isclose(same_d, 0)
         disputed_cell_pts = candidate_cell_pts[disputed]  # Shape: [N, 2].
@@ -189,13 +169,9 @@ class VoronoiGameMap:
 
     def remove_killed_units(self):
         """Remove killed units and Recompute the occupancy map"""
-        units_ = self.units.copy()
-        self.clear_board()
-
-        for unit in units_:
-            if unit.status > 0:
-                self.add_units([unit])
-        self.compute_occupancy_map()
+        # bfs search, update self.units
+        # self.compute_occupancy_map()
+        raise NotImplementedError
 
 
 if __name__ == '__main__':
@@ -208,12 +184,12 @@ if __name__ == '__main__':
 
     # Viz grid
     # Add 2 units to the same cell
-    game_map.add_units([Unit(0, (5.7, 5.7)),
-                        Unit(2, (5.3, 5.3))])
+    game_map.add_units([(0, (5.7, 5.7)),
+                        (2, (5.3, 5.3))])
     # Add units that will result in multiple cells at same dist
-    game_map.add_units([Unit(0, (0.5, 3.5)),
-                        Unit(1, (0.5, 5.5)),
-                        Unit(0, (0.5, 2.5))])
+    game_map.add_units([(0, (3.5, 0.5)),
+                            (1, (5.5, 0.5)),
+                            (0, (2.5, 0.5))])
 
     # # Add 100 points per player randomly
     # import random
