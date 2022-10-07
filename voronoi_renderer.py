@@ -44,8 +44,10 @@ class VoronoiRender:
         return px, py
 
     def px_to_metric(self, pos_px: Tuple) -> Tuple[float, float]:
-        """Convert a pixel coord on map to metric"""
-        px, py = pos_px
+        """Convert a pixel coord on map to metric
+        Note: Pixels are in (row, col) format, transpose of XY Axes.
+        """
+        py, px = pos_px
         if not 0 <= px <= self.img_h:
             raise ValueError(f"x out of range [0, {self.map_size}]: {px}")
         if not 0 <= py <= self.img_w:

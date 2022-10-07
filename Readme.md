@@ -21,13 +21,10 @@ pip install -r requirements.txt
 
 ## Coordinate System
 
-In order to make computation easy, our coordinate system follows numpy indexing.   
+We use an X-right, Y-down coordinate system.  
+In order to make computation easy, our coordinate system follows from numpy indexing (Origin: Top-left)  
 
-Origin: Top-left  
-X-Axis: Top -> Bottom  
-Y-Axis: Left -> Right  
-
-Note: In ordinary metric cases, x is left->right. If using that system, pass metric coords as (y, x)
+Note: Y-axes represents columns. So a unit at `location[10, 30]` is at `cell[30, 10]`.
 
 
 ## Features
@@ -40,61 +37,43 @@ Note: In ordinary metric cases, x is left->right. If using that system, pass met
 
 2. Variable Grid Size
 3. Add Units to Grid
-4. Represent Units Placement with multi-dimensional array (N, N, 4)  
-   Note: The history of individual units cannot be tracked.
-5. Visualize and Print Occupancy Grid. Here's a 10x10 grid:
 
 
-   ![](images/grid_10x10_occupancy.png)
+## Dev thoughts
 
-   
-   ```
-   Occupancy Grid:
-    [[0 0 0 0 4 1 1 1 1 1]
-     [0 0 0 0 4 1 1 1 1 1]
-     [0 0 0 0 4 1 1 1 1 1]
-     [0 0 0 0 4 1 1 1 1 1]
-     [0 0 0 0 4 1 1 1 1 1]
-     [2 2 2 4 4 4 3 3 3 3]
-     [2 2 2 2 2 3 3 3 3 3]
-     [2 2 2 2 2 3 3 3 3 3]
-     [2 2 2 2 2 3 3 3 3 3]
-     [2 2 2 2 2 3 3 3 3 3]]
-   ```
-   0-3: Player ID  
-   4: Disputed
+- TODO: Remove units with click (shift-click or change mode with key)
+- TODO: Check which units are killed on keypress
+- TODO: (Low priority) Click and drag to move units
 
-### Debugging Features
+- TODO: Voronoi diagram with all the units, map to each player and unit. Must be able to find a node/voronoi cell given
+  a unit ID. Create a graph from this map.
+- TODO: BFS search from the above graph to find all nodes of a given player.
+- TODO: Remi - replace SVG graphics with an image container
+       VIDEO: https://www.reddit.com/r/RemiGUI/comments/9skkag/streaming_images_from_a_webcam/
 
-1. Utility functions to deal with coords:
-```
-Test - Pos: (2.649603986720316, 7.00243706171401)
-  Pixel: (26, 70)
-  Cell: (2, 7)
-  Cell Coord: [2.5 7.5]
-```
+ 
+#### Game State 
+Stores a list of units, compute occupancy map, killed units. Compute new unit pos based on move
+commands for each unit. Occupancy map and killed units can be brute force (more efficient).
+Needs to maintain exact coords and unique ID of each unit. This is passed to players.
+      
+Exposed to Player: 
+   - List of units (player, exact pos, id). 
+   - Occupancy Map. 
+   - Curr/total score.
+   - Curr/total days.
+   - History (units, move commands, occ map) - easier motion tracking
+   - Move units. 
 
-2. Print and Visualize Unit Based Grid:  
-   2D map showing which cells are occupied because of units present 
-   within them.  
-   0-3 means cell is occupied by that player. 4 means contested.   
-   5 means no unit present (occupancy/dispute has not been computed yet).
+Will not show before/after killing - doesn't seem useful.
+       
+Internal: 
+   - Unit cell occupancy.
+   - Connected map (kill units). 
+   - Reset (calc game state from scratch, called after units move/are killed).
 
-   ```
-   Unit Occupancy Grid:
-    [[0 5 5 5 5 5 5 5 5 1]
-    [5 5 5 5 5 5 5 5 5 5]
-    [5 5 5 5 5 5 5 5 5 5]
-    [5 5 5 5 5 5 5 5 5 5]
-    [5 5 5 5 5 5 5 5 5 5]
-    [5 5 5 5 5 4 5 5 5 5]
-    [5 5 5 5 5 5 5 5 5 5]
-    [5 5 5 5 5 5 5 5 5 5]
-    [5 5 5 5 5 5 5 5 5 5]
-    [2 5 5 5 5 5 5 5 5 3]]
-   ```
-
-   Only cells with a single unit inside them are considered occupied:
-    ![](images/grid_10x10_unit_occupancy.png)
-
-   
+ 
+#### GUI 
+Main code that is launched and handles all interfaces.  
+Allows: start/stop/reset game, enable interactive mode.  
+Does: Initialize player code,  log errors.  
