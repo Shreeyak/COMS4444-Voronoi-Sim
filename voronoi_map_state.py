@@ -247,32 +247,39 @@ class VoronoiGameMap:
 
             # Vectorize calculations
             unit_pos = np.array(list(self.units[player].values()))
+            unit_pos_n = np.zeros_like(unit_pos)
             if move.shape != unit_pos.shape:
-                raise ValueError(f"Number of move commands ({move.shape}) must match num of units ({unit_pos.shape})")
+                raise ValueError(f"Player: {player}: "
+                                 f"Number of move commands ({move.shape}) must match num of units ({unit_pos.shape})")
 
-            # Clip to max distance and within map bounds
+            # Clip to max distance and move
             dist = move[:, 0]
             angle = move[:, 1]
             dist = np.clip(dist, a_max=max_dist, a_min=None)
-            unit_pos[:, 0] += dist * np.cos(angle)
-            unit_pos[:, 1] += dist * np.sin(angle)
+            unit_pos_n[:, 0] = unit_pos[:, 0] + dist * np.cos(angle)
+            unit_pos_n[:, 1] = unit_pos[:, 1] + dist * np.sin(angle)
 
-            # Limit unit within map - pos > map size
-            # TODO: FIX CALC
-            out_bounds = (unit_pos > (self.map_size - 1e-5)) | (unit_pos < 0) # unit pos strictly less than map size
+            # Clip to within map bounds
+            slope = np.tan(angle)
+            out_bounds = (unit_pos_n < 0) | (unit_pos_n > (self.map_size - 1e-5))  # unit pos strictly less than map size
             out_bounds = out_bounds[:, 0] | out_bounds[:, 1]
             if np.count_nonzero(out_bounds) > 0:
-                out_units = unit_pos[out_bounds, :]
-                rect_units = np.clip(out_units, a_min=0, a_max=self.map_size - 1e-5)
-                # new_x = x + ((new_y - y) / np.tan(angle))
-                rect_units[:, 0] = out_units[:, 0] + (rect_units[:, 1] - out_units[:, 1]) / np.tan(angle)
-                # new_y = y + ((new_x - x) * np.tan(angle))
-                rect_units[:, 1] = out_units[:, 1] + (rect_units[:, 0] - out_units[:, 0]) * np.tan(angle)
+                # X-axis out of bounds
+                # new_y = y + ((new_x - x) * slope)
+                pos_out = unit_pos_n[out_bounds, :]  # x1, y1
+                pos_rect = np.clip(pos_out, a_min=0, a_max=self.map_size - 1e-5)  # x2, y2
+                pos_rect[out_bounds, 1] = (pos_rect - pos_out)[out_bounds, 0] * slope + pos_out[out_bounds, 1]
+                unit_pos_n[out_bounds, :] = pos_rect
 
-                unit_pos[out_bounds] = rect_units
+                # Y-axis out of bounds
+                # new_x = x + ((new_y - y) / slope)
+                pos_out = unit_pos_n[out_bounds, :]  # x1, y1
+                pos_rect = np.clip(pos_out, a_min=0, a_max=self.map_size - 1e-5)  # x2, y2
+                pos_rect[out_bounds, 0] = (pos_rect - pos_out)[out_bounds, 1] / slope + pos_out[out_bounds, 0]
+                unit_pos_n[out_bounds, :] = pos_rect
 
             # Update positions
-            for id_, pos in zip(self.units[player], unit_pos):
+            for id_, pos in zip(self.units[player], unit_pos_n):
                 self.units[player][id_] = tuple(pos)
 
         return
@@ -316,7 +323,7 @@ if __name__ == '__main__':
 
     # Test - Occupancy Grid before killing
     game_map.compute_occupancy_map()
-    print("\nOccupancy Grid (before killing units):\n", game_map.occupancy_map)
+    print("\nOccupancy Grid (before killing units):\n", game_map.occupancy_map, "\n")
 
     grid_rgb = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
 
@@ -338,22 +345,21 @@ if __name__ == '__main__':
     ax1.set_title("Occupancy before kill")
     ax2.set_title("Connectivity")
     ax3.set_title("Occupancy after kill")
-    # plt.show()
-    # cv2.imwrite('images/grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
+    plt.show()
+    cv2.imwrite('images/grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
 
-
-    # Move units
+    # Test - Move units
     grid_rgb = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
     move_cmds = {}
     for player, units in game_map.units.items():
         move = np.ones((len(units), 2), dtype=float)
-        move[:, 1] = 90 * np.pi / 180
+        move[:, 1] = 45 * np.pi / 180
         move_cmds[player] = move
     game_map.move_units(move_cmds)
     game_map.compute_occupancy_map()
     grid_rgb_m = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
 
-    fig, (ax1, ax2) = plt.subplots(1, 3)
+    fig, (ax1, ax2) = plt.subplots(1, 2)
     ax1.imshow(grid_rgb)
     ax2.imshow(grid_rgb_m)
     ax1.set_title("Occupancy before move")
