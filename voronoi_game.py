@@ -2,6 +2,7 @@
 
 import copy
 import logging
+from pathlib import Path
 from typing import List
 
 import cv2
@@ -13,10 +14,12 @@ from voronoi_renderer import VoronoiRender
 
 
 class VoronoiEngine:
-    def __init__(self, player_list, map_size=100, total_days=100, save_video=None):
-        self.game_map = VoronoiGameMap(map_size=map_size)
+    def __init__(self, player_list, map_size=100, total_days=100, save_video=None, log=True):
+        self.game_map = VoronoiGameMap(map_size=map_size, log=log)
         self.renderer = VoronoiRender(map_size=map_size, scale_px=10, unit_px=5)
-        self.logger = logging.getLogger()
+        self.logger = logging.getLogger(__name__)
+        if not log:
+            self.logger.disabled = True
 
         self.total_days = total_days
         self.curr_day = -1
@@ -94,6 +97,9 @@ class VoronoiEngine:
         self.history_units[self.curr_day] = copy.deepcopy(self.game_map.units)
         self.write_video()
 
+        if self.curr_day % 10 == 0:
+            self.logger.info(f"Day: {self.curr_day} \tScore: {self.score_total}")
+
     def cleanup(self):
         # video - release and destroy windows
         if self.writer is not None:
@@ -102,10 +108,11 @@ class VoronoiEngine:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
-    # save_video = "game.mp4"
-    save_video = None
+    save_video = "game.mp4"
+    # save_video = None
     player_list = [Player(), Player(), Player(), Player()]
-    voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=1000, save_video=save_video)
+    voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=100, save_video=save_video)
     voronoi_engine.run_all()
-    print("Done")
+    logger.info(f" Video Saved: {Path(save_video).absolute()}")

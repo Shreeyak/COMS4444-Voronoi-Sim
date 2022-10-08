@@ -1,3 +1,4 @@
+import logging
 from collections import deque
 from typing import Dict, Tuple, List, Union
 
@@ -21,11 +22,15 @@ def _compute_cell_coords(map_size) -> np.ndarray:
 
 
 class VoronoiGameMap:
-    def __init__(self, map_size=100):
+    def __init__(self, map_size=100, log=True):
         """Class for methods related to the game map.
         The map is 100x100 cells, each cell is 1km wide.
         Unit coordinates on the map can be floating point.
         """
+        self.logger = logging.getLogger(__name__)
+        if not log:
+            self.logger.disabled = True
+
         self.map_size = map_size  # Width of the map in km. Each cell is 1km
 
         self.home_offset = 0.5  # Home bases are offset from corner by this amt
