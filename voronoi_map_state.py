@@ -1,5 +1,6 @@
+import logging
 from collections import deque
-from typing import Tuple, List
+from typing import Dict, Tuple, List, Union
 
 import matplotlib as mpl
 import numpy as np
@@ -21,11 +22,15 @@ def _compute_cell_coords(map_size) -> np.ndarray:
 
 
 class VoronoiGameMap:
-    def __init__(self, map_size=100):
+    def __init__(self, map_size=100, log=True):
         """Class for methods related to the game map.
         The map is 100x100 cells, each cell is 1km wide.
         Unit coordinates on the map can be floating point.
         """
+        self.logger = logging.getLogger(__name__)
+        if not log:
+            self.logger.disabled = True
+
         self.map_size = map_size  # Width of the map in km. Each cell is 1km
 
         self.home_offset = 0.5  # Home bases are offset from corner by this amt
@@ -45,9 +50,6 @@ class VoronoiGameMap:
 
         self.reset_game()
 
-        # TODO: Separate func for killing units
-        #   Func that does full update
-
     def add_units(self, units: List[Tuple[int, Tuple[float, float]]]):
         """Add some units to the map
 
@@ -66,7 +68,7 @@ class VoronoiGameMap:
             self.units[player][self.unit_id] = pos  # have a unique ID for each unit on the map
             self.unit_id += 1
 
-    def spawn_home_units(self):
+    def spawn_units(self):
         """Create a unit for each player at home base"""
         units = [x for x in self.spawn_loc.items()]
         self.add_units(units)
@@ -77,7 +79,7 @@ class VoronoiGameMap:
         self.units = {0: {}, 1: {}, 2: {}, 3: {}}
 
         # Game starts with 1 unit for each player in the corners
-        self.spawn_home_units()
+        self.spawn_units()
         self.compute_occupancy_map()
 
     def get_unit_occupied_cells(self) -> np.ndarray:
@@ -237,6 +239,59 @@ class VoronoiGameMap:
         self.compute_occupancy_map(connectivity_map > 3)
         return killed_units
 
+    def move_units(self, move_cmds: Dict[int, np.ndarray], max_dist: float = 1.0):
+        """Move each unit with direction and distance and update map.
+
+        Args:
+            move_cmds: For each player, direction and distance to move for each unit.
+                Shape: [N, 2] - Distance, angle
+            max_dist: Max distance, in km, each unit can travel
+        """
+        for player in range(4):
+            move = move_cmds[player]
+
+            # Vectorize calculations
+            unit_pos = np.array(list(self.units[player].values()))
+            unit_pos_n = np.zeros_like(unit_pos)
+            if len(unit_pos) == 0:
+                continue  # No units left on the map for this player
+
+            if move.shape != unit_pos.shape:
+                raise ValueError(f"Player: {player}: "
+                                 f"Number of move commands ({move.shape}) must match num of units ({unit_pos.shape})")
+
+            # Clip to max distance and move
+            dist = move[:, 0]
+            angle = move[:, 1]
+            dist = np.clip(dist, a_max=max_dist, a_min=None)
+            unit_pos_n[:, 0] = unit_pos[:, 0] + dist * np.cos(angle)
+            unit_pos_n[:, 1] = unit_pos[:, 1] + dist * np.sin(angle)
+
+            # Clip to within map bounds
+            slope = np.tan(angle)
+            out_bounds = (unit_pos_n < 0) | (unit_pos_n > (self.map_size - 1e-5))  # unit pos strictly less than map size
+            out_bounds = out_bounds[:, 0] | out_bounds[:, 1]
+            if np.count_nonzero(out_bounds) > 0:
+                # X-axis out of bounds
+                # new_y = y + ((new_x - x) * slope)
+                pos_out = unit_pos_n[out_bounds, :]  # x1, y1
+                pos_rect = np.clip(pos_out, a_min=0, a_max=self.map_size - 1e-5)  # x2, y2
+                pos_rect[out_bounds, 1] = (pos_rect - pos_out)[out_bounds, 0] * slope + pos_out[out_bounds, 1]
+                unit_pos_n[out_bounds, :] = pos_rect
+
+                # Y-axis out of bounds
+                # new_x = x + ((new_y - y) / slope)
+                pos_out = unit_pos_n[out_bounds, :]  # x1, y1
+                pos_rect = np.clip(pos_out, a_min=0, a_max=self.map_size - 1e-5)  # x2, y2
+                pos_rect[out_bounds, 0] = (pos_rect - pos_out)[out_bounds, 1] / slope + pos_out[out_bounds, 0]
+                unit_pos_n[out_bounds, :] = pos_rect
+
+            # Update positions
+            for id_, pos in zip(self.units[player], unit_pos_n):
+                self.units[player][id_] = tuple(pos)
+
+        return
+
     def update(self):
         """Update the map (after modifying units)"""
         self.compute_occupancy_map()
@@ -259,8 +314,8 @@ if __name__ == '__main__':
                         (2, (5.3, 5.3))])
     # Add units that will result in multiple cells at same dist
     game_map.add_units([(0, (3.5, 0.5)),
-                            (1, (5.5, 0.5)),
-                            (0, (2.5, 0.5))])
+                        (1, (5.5, 0.5)),
+                        (0, (2.5, 0.5))])
 
     # # Add 100 points per player randomly
     # import random
@@ -276,7 +331,7 @@ if __name__ == '__main__':
 
     # Test - Occupancy Grid before killing
     game_map.compute_occupancy_map()
-    print("\nOccupancy Grid (before killing units):\n", game_map.occupancy_map)
+    print("\nOccupancy Grid (before killing units):\n", game_map.occupancy_map, "\n")
 
     grid_rgb = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
 
@@ -300,3 +355,21 @@ if __name__ == '__main__':
     ax3.set_title("Occupancy after kill")
     plt.show()
     # cv2.imwrite('images/grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
+
+    # Test - Move units
+    grid_rgb = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
+    move_cmds = {}
+    for player, units in game_map.units.items():
+        move = np.ones((len(units), 2), dtype=float)
+        move[:, 1] = 45 * np.pi / 180
+        move_cmds[player] = move
+    game_map.move_units(move_cmds)
+    game_map.compute_occupancy_map()
+    grid_rgb_m = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    ax1.imshow(grid_rgb)
+    ax2.imshow(grid_rgb_m)
+    ax1.set_title("Occupancy before move")
+    ax2.set_title("Occupancy after move")
+    plt.show()
