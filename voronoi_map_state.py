@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Tuple, List, Union
+from typing import Dict, Tuple, List, Union
 
 import matplotlib as mpl
 import numpy as np
@@ -234,10 +234,48 @@ class VoronoiGameMap:
         self.compute_occupancy_map(connectivity_map > 3)
         return killed_units
 
-    def move_units(self, move_cmds: Union[List, np.ndarray]):
-        """Move each unit with direction and distance and update map"""
-        # todo: implement
-        raise NotImplementedError
+    def move_units(self, move_cmds: Dict[int, np.ndarray], max_dist: float = 1.0):
+        """Move each unit with direction and distance and update map.
+
+        Args:
+            move_cmds: For each player, direction and distance to move for each unit.
+                Shape: [N, 2] - Distance, angle
+            max_dist: Max distance, in km, each unit can travel
+        """
+        for player in range(4):
+            move = move_cmds[player]
+
+            # Vectorize calculations
+            unit_pos = np.array(list(self.units[player].values()))
+            if move.shape != unit_pos.shape:
+                raise ValueError(f"Number of move commands ({move.shape}) must match num of units ({unit_pos.shape})")
+
+            # Clip to max distance and within map bounds
+            dist = move[:, 0]
+            angle = move[:, 1]
+            dist = np.clip(dist, a_max=max_dist, a_min=None)
+            unit_pos[:, 0] += dist * np.cos(angle)
+            unit_pos[:, 1] += dist * np.sin(angle)
+
+            # Limit unit within map - pos > map size
+            # TODO: FIX CALC
+            out_bounds = (unit_pos > (self.map_size - 1e-5)) | (unit_pos < 0) # unit pos strictly less than map size
+            out_bounds = out_bounds[:, 0] | out_bounds[:, 1]
+            if np.count_nonzero(out_bounds) > 0:
+                out_units = unit_pos[out_bounds, :]
+                rect_units = np.clip(out_units, a_min=0, a_max=self.map_size - 1e-5)
+                # new_x = x + ((new_y - y) / np.tan(angle))
+                rect_units[:, 0] = out_units[:, 0] + (rect_units[:, 1] - out_units[:, 1]) / np.tan(angle)
+                # new_y = y + ((new_x - x) * np.tan(angle))
+                rect_units[:, 1] = out_units[:, 1] + (rect_units[:, 0] - out_units[:, 0]) * np.tan(angle)
+
+                unit_pos[out_bounds] = rect_units
+
+            # Update positions
+            for id_, pos in zip(self.units[player], unit_pos):
+                self.units[player][id_] = tuple(pos)
+
+        return
 
     def update(self):
         """Update the map (after modifying units)"""
@@ -261,8 +299,8 @@ if __name__ == '__main__':
                         (2, (5.3, 5.3))])
     # Add units that will result in multiple cells at same dist
     game_map.add_units([(0, (3.5, 0.5)),
-                            (1, (5.5, 0.5)),
-                            (0, (2.5, 0.5))])
+                        (1, (5.5, 0.5)),
+                        (0, (2.5, 0.5))])
 
     # # Add 100 points per player randomly
     # import random
@@ -300,5 +338,24 @@ if __name__ == '__main__':
     ax1.set_title("Occupancy before kill")
     ax2.set_title("Connectivity")
     ax3.set_title("Occupancy after kill")
-    plt.show()
+    # plt.show()
     # cv2.imwrite('images/grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
+
+
+    # Move units
+    grid_rgb = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
+    move_cmds = {}
+    for player, units in game_map.units.items():
+        move = np.ones((len(units), 2), dtype=float)
+        move[:, 1] = 90 * np.pi / 180
+        move_cmds[player] = move
+    game_map.move_units(move_cmds)
+    game_map.compute_occupancy_map()
+    grid_rgb_m = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
+
+    fig, (ax1, ax2) = plt.subplots(1, 3)
+    ax1.imshow(grid_rgb)
+    ax2.imshow(grid_rgb_m)
+    ax1.set_title("Occupancy before move")
+    ax2.set_title("Occupancy after move")
+    plt.show()

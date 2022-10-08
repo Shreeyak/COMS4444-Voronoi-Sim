@@ -1,5 +1,6 @@
 """Game engine to handle days, unit movement"""
 
+import logging
 from collections import deque
 from typing import Tuple, List
 
@@ -16,6 +17,7 @@ class VoronoiEngine:
     def __init__(self, map_size=100, total_days=100):
         self.game_map = VoronoiGameMap(map_size=map_size)
         self.renderer = VoronoiRender(map_size=map_size, scale_px=10, unit_px=10)
+        self.logger = logging.getLogger()
 
         self.total_days = total_days
         self.curr_day = 0
@@ -54,6 +56,8 @@ class VoronoiEngine:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+
     voronoi_engine = VoronoiEngine(map_size=100, total_days=2)
     voronoi_engine.run()
 
