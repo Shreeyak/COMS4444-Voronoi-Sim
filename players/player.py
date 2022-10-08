@@ -8,6 +8,11 @@ class Player:
         self.player_idx = None
         self.name = "Default Player"
 
+        # TODO: Pass game engine, to access game data
+        # TODO: Get spawn point,
+        # TODO: Pass random generator obj
+        # TODO: Pass a precomp dir
+
     def set_player_idx(self, idx):
         """Assigns the player's index within the game engine"""
         self.player_idx = idx

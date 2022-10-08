@@ -47,15 +47,16 @@ Note: Y-axes represents columns. So a unit at `location[10, 30]` is at `cell[30,
 
 ## Dev thoughts
 
-- TODO: Game engine that tracks days, movements, etc. Uses voronoi state.
-The interactive mode can be a different engine.
+- TODO: Use pygame to visualize the game
+- TODO: Complete player interface
+- TODO: Use Voronoi diagram - map each player to unit. Must be able to find a node/voronoi cell given
+  a unit ID. Create a graph from this map. Use to identify isolated units and build occ map.
+- TODO: BFS search from the above graph to find all nodes of a given player.
 
+Interactive Mode:
 - TODO: Remove units with click (shift-click or change mode with key)
 - TODO: (Low priority) Click and drag to move units
 
-- TODO: Voronoi diagram with all the units, map to each player and unit. Must be able to find a node/voronoi cell given
-  a unit ID. Create a graph from this map.
-- TODO: BFS search from the above graph to find all nodes of a given player.
 - TODO: Remi - replace SVG graphics with an image container
        VIDEO: https://www.reddit.com/r/RemiGUI/comments/9skkag/streaming_images_from_a_webcam/
 
@@ -72,9 +73,7 @@ Exposed to Player:
    - Curr/total days.
    - History (units, move commands, occ map) - easier motion tracking
    - Move units. 
-
-Will not show before/after killing - doesn't seem useful.
-       
+ 
 Internal: 
    - Unit cell occupancy.
    - Connected map (kill units). 
