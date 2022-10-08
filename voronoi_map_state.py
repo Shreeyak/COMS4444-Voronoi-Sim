@@ -63,7 +63,7 @@ class VoronoiGameMap:
             self.units[player][self.unit_id] = pos  # have a unique ID for each unit on the map
             self.unit_id += 1
 
-    def spawn_home_units(self):
+    def spawn_units(self):
         """Create a unit for each player at home base"""
         units = [x for x in self.spawn_loc.items()]
         self.add_units(units)
@@ -74,7 +74,7 @@ class VoronoiGameMap:
         self.units = {0: {}, 1: {}, 2: {}, 3: {}}
 
         # Game starts with 1 unit for each player in the corners
-        self.spawn_home_units()
+        self.spawn_units()
         self.compute_occupancy_map()
 
     def get_unit_occupied_cells(self) -> np.ndarray:
@@ -248,6 +248,9 @@ class VoronoiGameMap:
             # Vectorize calculations
             unit_pos = np.array(list(self.units[player].values()))
             unit_pos_n = np.zeros_like(unit_pos)
+            if len(unit_pos) == 0:
+                continue  # No units left on the map for this player
+
             if move.shape != unit_pos.shape:
                 raise ValueError(f"Player: {player}: "
                                  f"Number of move commands ({move.shape}) must match num of units ({unit_pos.shape})")
@@ -346,7 +349,7 @@ if __name__ == '__main__':
     ax2.set_title("Connectivity")
     ax3.set_title("Occupancy after kill")
     plt.show()
-    cv2.imwrite('images/grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
+    # cv2.imwrite('images/grid_10x10_occupancy.png', cv2.cvtColor(grid_rgb, cv2.COLOR_RGB2BGR))
 
     # Test - Move units
     grid_rgb = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
