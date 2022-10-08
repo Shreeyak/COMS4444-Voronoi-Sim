@@ -49,9 +49,9 @@ class VoronoiRender:
         """
         px, py = pos_px
         if not 0 <= px <= self.img_h:
-            raise ValueError(f"x out of range [0, {self.map_size}]: {px}")
+            raise ValueError(f"x out of range [0, {self.img_h}]: {px}")
         if not 0 <= py <= self.img_w:
-            raise ValueError(f"y out of range [0, {self.map_size}]: {py}")
+            raise ValueError(f"y out of range [0, {self.img_w}]: {py}")
 
         x, y = map(lambda z: round(z / self.scale_px, 2), [px, py])
         return x, y

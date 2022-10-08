@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Tuple, List
+from typing import Tuple, List, Union
 
 import matplotlib as mpl
 import numpy as np
@@ -44,9 +44,6 @@ class VoronoiGameMap:
         self.occupancy_map = None  # Which cells belong to which player
 
         self.reset_game()
-
-        # TODO: Separate func for killing units
-        #   Func that does full update
 
     def add_units(self, units: List[Tuple[int, Tuple[float, float]]]):
         """Add some units to the map
@@ -236,6 +233,11 @@ class VoronoiGameMap:
         # Update the occupancy map
         self.compute_occupancy_map(connectivity_map > 3)
         return killed_units
+
+    def move_units(self, move_cmds: Union[List, np.ndarray]):
+        """Move each unit with direction and distance and update map"""
+        # todo: implement
+        raise NotImplementedError
 
     def update(self):
         """Update the map (after modifying units)"""
