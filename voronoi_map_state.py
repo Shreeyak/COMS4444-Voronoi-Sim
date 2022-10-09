@@ -180,47 +180,27 @@ class VoronoiGameMap:
 
         return occ_map
 
-    def get_connectivity_map(self):
-        """Map of all cells that have a path to their respective home base
-        Uses a brute-force BFS search for each player, from their home base out through the occupancy map
+    def get_connectivity_map(self) -> np.ndarray:
+        """Map of all cells that have a path to their respective home base.
+        Returns:
+            np.ndarray: Connectivity map: Valid cells are marked with the player number,
+                others are set to 4 (disputed). Shape: [N, N]
         """
         occ_map = self.occupancy_map
         connected = np.ones_like(occ_map) * 4  # Default = disputed/empty
-
-        # Neighbouring cell coords
-        adj = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-        h, w = occ_map.shape
-
-        def is_safe(arr, y, x):
-            # Check if it's a valid coord and value
-            # arr = bool 2D map of player's occupancy map
-            return 0 <= y < h and 0 <= x < w and arr[y, x]
-
         for player in range(4):
-            que = deque()
-            reached = set()
-
-            occ_map_ = (occ_map == player)
             start = self.spawn_loc[player]
-            start = (int(start[1]), int(start[0]))  # Convert to cell index
-            if occ_map_[start]:
-                que.append(start)
+            start = (int(start[0]), int(start[1]))  # Convert to cell index
 
-            # while len(que) > 0:
-            while que:
-                ele = que.popleft()
-                connected[ele] = player
+            h, w = occ_map.shape
+            mask = np.zeros((h + 2, w + 2), np.uint8)
 
-                # add neighbors
-                for neigh in adj:
-                    y = ele[0] + neigh[0]
-                    x = ele[1] + neigh[1]
-                    n = (y, x)
-                    if n not in reached:
-                        if is_safe(occ_map_, y, x):
-                            que.append(n)
-                            reached.add(n)
+            floodflags = 8  # Check all 8 directions
+            floodflags |= cv2.FLOODFILL_MASK_ONLY  # Don't modify orig image
+            floodflags |= (1 << 8)  # Fill mask with ones where true
 
+            num, im, mask, rect = cv2.floodFill(occ_map, mask, start, player, 0, 0, floodflags)
+            connected[mask[1:-1, 1:-1].astype(bool)] = player
         return connected
 
     def remove_killed_units(self) -> List[Tuple]:
