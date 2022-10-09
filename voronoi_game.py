@@ -4,8 +4,9 @@ import atexit
 import copy
 import logging
 import signal
+import traceback
 from pathlib import Path
-from typing import List
+from typing import Callable, List
 
 import cv2
 import numpy as np
@@ -74,13 +75,12 @@ class VoronoiEngine:
     def occupancy_map(self):
         return self.game_map.occupancy_map
 
-    def add_players(self, players_list: List[Player]):
+    def add_players(self, players_list: List[Callable]):
         if len(players_list) != 4:
             raise ValueError(f"Must have 4 players in the game. Provided: {len(players_list)}")
 
-        for idx, pl in enumerate(players_list):
-            pl.player_idx = idx
-            pl.set_rng(self.rng)
+        for idx, PlayerCls in enumerate(players_list):
+            pl = PlayerCls(idx, self.rng, self.game_map.spawn_loc[idx])
             self.players.append(pl)
 
     def run_all(self):
@@ -118,14 +118,16 @@ class VoronoiEngine:
 
             except TimeoutException:
                 self.logger.error(f" Timeout - Player {player.player_idx} ({player.name}) on day {self.curr_day}"
-                                  f" - play took longer than {self.player_timeout}s")
+                                  f" - play took longer than {self.player_timeout}s\n"
+                                  f"NULL moves for this turn.")
                 moves = np.zeros((len(self.game_map.units[player.player_idx]), 2), dtype=float)
 
             except Exception as e:
                 self.logger.error(
                     f" Exception raised by Player {player.player_idx} ({player.name}) on day {self.curr_day}. "
                     f"NULL moves for this turn.\n"
-                    f"  Error Message: {e}")
+                    f"  Error Message: {e}\n"
+                    f"{traceback.format_exc()}")
                 moves = np.zeros((len(self.game_map.units[player.player_idx]), 2), dtype=float)
 
             signal.alarm(0)  # Clear timeout alarm

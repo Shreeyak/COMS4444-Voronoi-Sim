@@ -1,19 +1,25 @@
-from typing import Dict
+from typing import Dict, Tuple
 
 import numpy as np
-import scipy.spatial
+
+from players.player import Player
 
 
-class Player:
+class G8Player(Player):
     def __init__(self, player_idx, rng, spawn_pt):
-        self.player_idx = player_idx  # The index of this player in the game, between 0-3
-        self.rng = rng
-        self.spawn_pt = spawn_pt
-        self.name = "Df Player"
+        super().__init__(player_idx, rng, spawn_pt)
+        self.name = "G8 Player"
 
-    def play(self, units_all: Dict[int, Dict[int, Dict]], occupancy_map: np.ndarray, current_scores: np.ndarray,
-             total_scores: np.ndarray, unit_history: Dict[int, Dict], curr_day: int, total_days: int):
+    def play(self,
+             units_all: Dict[int, Dict[int, Tuple]],
+             occupancy_map: np.ndarray,
+             current_scores: np.ndarray,
+             total_scores: np.ndarray,
+             unit_history: Dict[int, Dict],
+             curr_day: int,
+             total_days: int):
         """Send movement commands to player's unit
+
         Args:
             units_all: Dict of all units - {player: {id: (pos_x, posy_)}}
             occupancy_map: Which unit occupies each cell on the grid. Shape: (N, N).
@@ -40,8 +46,6 @@ class Player:
         units = unit_pos[self.player_idx]  # Shape: [N, 2]
         moves = np.ones_like(units)
         angle = 45 - (90 * self.player_idx)  # towards center
-        angle = angle - (curr_day % 45) + (curr_day % 90 * 0.9)  # Spiral + noise
-        angle = angle - ((units[:, 0] - 50) * 0.1 / (units[:, 1] - 50) * 0.1) % 30 + (curr_day/total_days)  # noise
         moves[:, 1] = angle * np.pi / 180
 
         # move towards nearest enemy unit
