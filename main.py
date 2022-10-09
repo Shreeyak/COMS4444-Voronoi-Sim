@@ -15,7 +15,7 @@ from players.player import Player
 
 class VoronoiInterface:
     def __init__(self, player_list, total_days=100, map_size=100, player_timeout=300, game_window_height=800,
-                 save_video=None, fps=60):
+                 save_video=None, fps=60, spawn_freq=1):
         """Interface for the Voronoi Game.
         Uses pygame to launch an interactive window
 
@@ -29,13 +29,14 @@ class VoronoiInterface:
         """
         atexit.register(self.cleanup)  # Calls destructor
 
+        self.spawn_freq = spawn_freq
         self.map_size = map_size
         scale_px = game_window_height // map_size
         self.total_days = total_days
         # TODO: implement player list
         self.player_list = player_list
         self.game_state = VoronoiEngine(self.player_list, map_size=map_size, total_days=total_days,
-                                        save_video=None)
+                                        save_video=None, spawn_freq=spawn_freq)
         self.renderer = VoronoiRender(map_size=map_size, scale_px=scale_px, unit_px=int(scale_px / 2))
 
         pygame.init()
@@ -101,7 +102,7 @@ class VoronoiInterface:
         if self.reset:
             self.game_state.cleanup()
             self.game_state = VoronoiEngine(self.player_list, map_size=map_size, total_days=total_days,
-                                            save_video=save_video)
+                                            save_video=save_video, spawn_freq=self.spawn_freq)
             self.reset = False
             return
 
@@ -186,6 +187,12 @@ if __name__ == '__main__':
     parser.add_argument("--map_size", "-m", help="Size of the map in km", default=100, type=int)
     parser.add_argument("--no_gui", "-g", help="Disable GUI", action="store_true")
     parser.add_argument("--days", "-d", help="Total number of days", default=10, type=int)
+    parser.add_argument("--spawn", default=5, type=int,
+                        help="Number of days after which a new unit spawns at the homebase")
+    parser.add_argument("--player1", "-p1", default="d", help="Specifying player 1 out of 4")
+    parser.add_argument("--player2", "-p2", default="d", help="Specifying player 2 out of 4")
+    parser.add_argument("--player3", "-p3", default="d", help="Specifying player 3 out of 4")
+    parser.add_argument("--player4", "-p4", default="d", help="Specifying player 4 out of 4")
     parser.add_argument("--fps", "-f", help="Max speed of simulation", default=60, type=int)
     args = parser.parse_args()
 
@@ -200,10 +207,12 @@ if __name__ == '__main__':
 
     player_list = [Player(), Player(), Player(), Player()]
     if args.no_gui:
-        voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=total_days, save_video=save_video)
+        voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=total_days, save_video=save_video,
+                                       spawn_freq=args.spawn)
         voronoi_engine.run_all()
     else:
         user_interface = VoronoiInterface(player_list, total_days=total_days, map_size=map_size, player_timeout=300,
-                                          game_window_height=game_window_height, save_video=save_video, fps=fps)
+                                          game_window_height=game_window_height, save_video=save_video, fps=fps,
+                                          spawn_freq=args.spawn)
         user_interface.run()
 

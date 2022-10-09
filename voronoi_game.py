@@ -15,7 +15,7 @@ from voronoi_renderer import VoronoiRender
 
 
 class VoronoiEngine:
-    def __init__(self, player_list, map_size=100, total_days=100, save_video=None, log=True):
+    def __init__(self, player_list, map_size=100, total_days=100, save_video=None, log=True, spawn_freq=1):
         self.game_map = VoronoiGameMap(map_size=map_size, log=log)
         self.renderer = VoronoiRender(map_size=map_size, scale_px=10, unit_px=5)
         self.logger = logging.getLogger(__name__)
@@ -23,6 +23,7 @@ class VoronoiEngine:
             self.logger.disabled = True
         atexit.register(self.cleanup)  # Calls destructor
 
+        self.spawn_freq = spawn_freq
         self.total_days = total_days
         self.curr_day = -1
         self.score_total = np.zeros((4,), dtype=int)
@@ -79,7 +80,7 @@ class VoronoiEngine:
             return
 
         # spawn units
-        if self.curr_day > 0:
+        if (self.curr_day + 1) % self.spawn_freq == 0:
             self.game_map.spawn_units()
 
         # move units - accept inputs from each player
