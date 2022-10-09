@@ -9,7 +9,6 @@ import cv2
 import numpy as np
 import pygame
 
-import players
 from voronoi_renderer import VoronoiRender
 from voronoi_game import VoronoiEngine
 
@@ -39,12 +38,11 @@ class VoronoiInterface:
         self.map_size = map_size
         scale_px = game_window_height // map_size
         self.total_days = total_days
-        # TODO: implement player list
-        self.player_list = player_list
-        self.game_state = VoronoiEngine(self.player_list, map_size=map_size, total_days=total_days,
+        self.game_state = VoronoiEngine(player_list, map_size=map_size, total_days=total_days,
                                         save_video=None, spawn_freq=spawn_freq, player_timeout=player_timeout,
                                         seed=seed)
         self.renderer = VoronoiRender(map_size=map_size, scale_px=scale_px, unit_px=int(scale_px / 2))
+        self.player_list = self.game_state.players
 
         pygame.init()
         caption = "COMS 4444: Voronoi"
@@ -192,27 +190,37 @@ def get_player(name: str):
     """Gets an instance of Player class given name.
     Name must match the filenames in player directory
     """
+    # Avoid exceptions due to errors in other players code
     if name == "d":
-        pl = players.player.Player()
+        from players.player import Player
+        pl_cls = Player
     elif name == "g1":
-        pl = players.g1_player.Player()
+        from players.g1_player import G1Player
+        pl_cls = G1Player
     elif name == "g2":
-        pl = players.g2_player.Player()
+        from players.g2_player import G2Player
+        pl_cls = G2Player
     elif name == "g3":
-        pl = players.g3_player.Player()
+        from players.g3_player import G3Player
+        pl_cls = G3Player
     elif name == "g4":
-        pl = players.g4_player.Player()
+        from players.g4_player import G4Player
+        pl_cls = G4Player
     elif name == "g5":
-        pl = players.g5_player.Player()
+        from players.g5_player import G5Player
+        pl_cls = G5Player
     elif name == "g6":
-        pl = players.g6_player.Player()
+        from players.g6_player import G6Player
+        pl_cls = G6Player
     elif name == "g7":
-        pl = players.g7_player.Player()
+        from players.g7_player import G7Player
+        pl_cls = G7Player
     elif name == "g8":
-        pl = players.g8_player.Player()
+        from players.g8_player import G8Player
+        pl_cls = G8Player
     else:
-        raise ValueError(f"Invalid player: {name}")
-    return pl
+        raise ValueError(f"Invalid player: {name}. Must be one of 'd' or 'g1 - g8'")
+    return pl_cls
 
 
 if __name__ == '__main__':
