@@ -1,7 +1,8 @@
+.vscode/
 .idea/
 *.png
 *.jpg
-.DS_Store
+*.DS_Store
 __pycache__/
 venv
 .vscode
@@ -9,10 +10,4 @@ venv
 
 # Keep images directory
 !images/*
-
-# Ignore all of these regardless
-images/.DS_Store
-
-venv
-
-.vscode
+!videos/.gitkeep

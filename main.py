@@ -2,6 +2,7 @@
 
 import argparse
 import atexit
+import datetime
 import logging
 
 import cv2
@@ -75,10 +76,10 @@ class VoronoiInterface:
         if save_video is not None:
             self.create_video = True
             self.video_path = save_video
-            self.frame = np.array((s_width, s_height, 3), dtype=np.uint8)
+            self.frame = np.empty((s_width, s_height, 3), dtype=np.uint8)
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # Codec. Alt: 'avc1'
             self.writer = cv2.VideoWriter(save_video, apiPreference=0, fourcc=fourcc,
-                                          fps=10, frameSize=(s_width, s_height))
+                                          fps=fps, frameSize=(s_width, s_height))
 
         # Game data
         self.reset = False
@@ -120,18 +121,20 @@ class VoronoiInterface:
 
         # Draw Map
         occ_img = self.renderer.get_colored_occ_map(self.game_state.occupancy_map, self.game_state.units)
-        pygame.surfarray.blit_array(self.occ_surf, np.swapaxes(occ_img, 0, 1))
+        pygame.pixelcopy.array_to_surface(self.occ_surf, np.swapaxes(occ_img, 0, 1))
 
         self.draw_text()
 
         # Update the game window to see latest changes
         pygame.display.update()
 
-        if self.create_video and self.game_state.curr_day < self.total_days - 1:
-            frame = pygame.surfarray.array3d(self.screen)
-            frame = np.swapaxes(frame, 0, 1)
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            self.writer.write(frame)
+        if self.create_video and self.writer is not None:
+            if self.game_state.curr_day < self.total_days:
+                # Don't record past end of game
+                pygame.pixelcopy.surface_to_array(self.frame, self.screen)
+                frame = np.swapaxes(self.frame, 0, 1)
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                self.writer.write(frame)
 
     def draw_text(self):
         # Draw Info text on screen surface
@@ -164,7 +167,7 @@ class VoronoiInterface:
 
     def cleanup(self):
         # video - release and destroy windows
-        if self.writer is not None:
+        if self.create_video and self.writer:
             self.writer.release()
             self.writer = None
             logging.info(f" Saved video to: {self.video_path}")
@@ -228,6 +231,8 @@ if __name__ == '__main__':
                         help="Timeout for each players execution. 0 to disable")
     parser.add_argument("--seed", "-s", type=int, default=2,
                         help="Seed used by random number generator. 0 to disable.")
+    parser.add_argument("--out_video", "-o", action="store_true",
+                        help="If passed, save a video of the run. Slows down the simulation 2x.")
     args = parser.parse_args()
 
     # logging.basicConfig(level=logging.DEBUG)
@@ -240,8 +245,11 @@ if __name__ == '__main__':
     player_timeout = args.timeout
     spawn = args.spawn
     seed = args.seed
-    save_video = "game.mp4"
-    seed = args.seed
+    if args.out_video:
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        save_video = f"videos/game-{now}.mp4"
+    else:
+        save_video = None
 
     player_list = []
     for name in [args.player1, args.player2, args.player3, args.player4]:
