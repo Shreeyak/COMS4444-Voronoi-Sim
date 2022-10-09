@@ -14,15 +14,20 @@ from voronoi_game import VoronoiEngine
 
 
 class VoronoiInterface:
-    def __init__(self, player_list, total_days=100, map_size=100, player_timeout=300, game_window_height=800,
+    def __init__(self, player_list, total_days=100, map_size=100, player_timeout=120, game_window_height=800,
                  save_video=None, fps=60, spawn_freq=1):
         """Interface for the Voronoi Game.
         Uses pygame to launch an interactive window
 
         Args:
+            player_list: List of Player objects. Must have 4 players.
+            total_days: Num of days in the simulation
             map_size: Width of the map in km. Each cell is 1x1km
             game_window_height: Width of the window the game will launch in
-            player_timeout: Timeout for each player
+            player_timeout: Timeout for each player in seconds. Set to 0 to disable.
+            save_video: Path to save video of game. Set to None to disable.
+            fps: Frames per second for the game. Controls speed.
+            spawn_freq: Frequency, in days, at which new units are spawned
 
         Ref:
             Pygame Design Pattern: https://www.patternsgameprog.com/discover-python-and-patterns-8-game-loop-pattern/
@@ -36,7 +41,7 @@ class VoronoiInterface:
         # TODO: implement player list
         self.player_list = player_list
         self.game_state = VoronoiEngine(self.player_list, map_size=map_size, total_days=total_days,
-                                        save_video=None, spawn_freq=spawn_freq)
+                                        save_video=None, spawn_freq=spawn_freq, player_timeout=player_timeout)
         self.renderer = VoronoiRender(map_size=map_size, scale_px=scale_px, unit_px=int(scale_px / 2))
 
         pygame.init()
@@ -62,8 +67,6 @@ class VoronoiInterface:
         # Game Map sub-surface
         self.occ_surf = self.screen.subsurface(pygame.Rect((0, 0), (self.renderer.img_w, self.renderer.img_h)))
 
-        # TODO: Implement player timeout
-        self.player_timeout = 3000000  # milliseconds
         self.clock = pygame.time.Clock()
         self.fps = fps
 
@@ -101,8 +104,7 @@ class VoronoiInterface:
         """Update the state of the game"""
         if self.reset:
             self.game_state.cleanup()
-            self.game_state = VoronoiEngine(self.player_list, map_size=map_size, total_days=total_days,
-                                            save_video=save_video, spawn_freq=self.spawn_freq)
+            self.game_state.reset()
             self.reset = False
             return
 
@@ -230,6 +232,7 @@ if __name__ == '__main__':
     map_size = args.map_size
     total_days = args.days
     fps = args.fps
+    player_timeout = args.player_timeout
     save_video = "game.mp4"
 
     player_list = []
@@ -238,11 +241,12 @@ if __name__ == '__main__':
 
     if args.no_gui:
         voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=total_days, save_video=save_video,
-                                       spawn_freq=args.spawn)
+                                       spawn_freq=args.spawn, player_timeout=player_timeout)
         voronoi_engine.run_all()
     else:
-        user_interface = VoronoiInterface(player_list, total_days=total_days, map_size=map_size, player_timeout=300,
-                                          game_window_height=game_window_height, save_video=save_video, fps=fps,
+        user_interface = VoronoiInterface(player_list, total_days=total_days, map_size=map_size,
+                                          player_timeout=player_timeout, game_window_height=game_window_height,
+                                          save_video=save_video, fps=fps,
                                           spawn_freq=args.spawn)
         user_interface.run()
 
