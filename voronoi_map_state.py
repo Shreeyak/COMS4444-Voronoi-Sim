@@ -2,6 +2,7 @@ import logging
 from collections import deque
 from typing import Dict, Tuple, List, Union
 
+import cv2
 import matplotlib as mpl
 import numpy as np
 import scipy
@@ -186,33 +187,37 @@ class VoronoiGameMap:
         occ_map = self.occupancy_map
         connected = np.ones_like(occ_map) * 4  # Default = disputed/empty
 
+        # Neighbouring cell coords
+        adj = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+        h, w = occ_map.shape
+
+        def is_safe(arr, y, x):
+            # Check if it's a valid coord and value
+            # arr = bool 2D map of player's occupancy map
+            return 0 <= y < h and 0 <= x < w and arr[y, x]
+
         for player in range(4):
             que = deque()
             reached = set()
 
-            start = self.spawn_loc[player]
-            start = (int(start[1]), int(start[0]))
-            que.append(start)
-
             occ_map_ = (occ_map == player)
-            while len(que) > 0:
+            start = self.spawn_loc[player]
+            start = (int(start[1]), int(start[0]))  # Convert to cell index
+            if occ_map_[start]:
+                que.append(start)
+
+            # while len(que) > 0:
+            while que:
                 ele = que.popleft()
+                connected[ele] = player
 
-                if occ_map_[ele]:
-                    connected[ele] = player
-
-                    # neighbors - iter
-                    ymin = max(0, ele[0] - 1)
-                    ymax = min(connected.shape[0] - 1, ele[0] + 1)
-                    xmin = max(0, ele[1] - 1)
-                    xmax = min(connected.shape[1] - 1, ele[1] + 1)
-                    neigh = []
-                    for y in range(ymin, ymax + 1):
-                        for x in range(xmin, xmax + 1):
-                            neigh.append((y, x))
-
-                    for n in neigh:
-                        if n not in reached:
+                # add neighbors
+                for neigh in adj:
+                    y = ele[0] + neigh[0]
+                    x = ele[1] + neigh[1]
+                    n = (y, x)
+                    if n not in reached:
+                        if is_safe(occ_map_, y, x):
                             que.append(n)
                             reached.add(n)
 
