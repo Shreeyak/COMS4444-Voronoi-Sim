@@ -1,5 +1,6 @@
 """Game engine to handle days, unit movement"""
 
+import atexit
 import copy
 import logging
 from pathlib import Path
@@ -20,6 +21,7 @@ class VoronoiEngine:
         self.logger = logging.getLogger(__name__)
         if not log:
             self.logger.disabled = True
+        atexit.register(self.cleanup)  # Calls destructor
 
         self.total_days = total_days
         self.curr_day = -1
@@ -36,9 +38,8 @@ class VoronoiEngine:
         self.writer = None
         if save_video is not None:
             self.create_video = True
-            # we are using x264 codec for mp4
-            # fourcc = cv2.VideoWriter_fourcc(*'avc1')
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            self.video_path = Path(save_video)
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # Codec. Alt: 'avc1'
             self.writer = cv2.VideoWriter(save_video, apiPreference=0, fourcc=fourcc,
                                           fps=10, frameSize=(int(1000), int(1000)))
             self.write_video()  # Save 1st frame
@@ -57,15 +58,14 @@ class VoronoiEngine:
         self.cleanup()
 
     def write_video(self):
-        if not self.create_video:
-            return
-        frame = self.renderer.get_colored_occ_map(self.occupancy_map, self.game_map.units)
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        self.writer.write(frame)
+        if self.create_video:
+            frame = self.renderer.get_colored_occ_map(self.occupancy_map, self.game_map.units)
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            self.writer.write(frame)
 
     def progress_day(self):
         self.curr_day += 1
-        if self.curr_day >= self.total_days:
+        if self.curr_day > self.total_days - 1:
             logging.warning(f"Played all days ({self.total_days}). Cannot progress day further. Ignoring")
             return
 
@@ -76,6 +76,7 @@ class VoronoiEngine:
         # move units - accept inputs from each player
         move_cmds = {}
         for player in self.players:
+            # TODO: Add a timeout
             try:
                 moves = player.play(self.game_map.units)
             except Exception as e:
@@ -99,11 +100,17 @@ class VoronoiEngine:
 
         if self.curr_day % 10 == 0:
             self.logger.info(f"Day: {self.curr_day} \tScore: {self.score_total}")
+        self.logger.debug(f"Day: {self.curr_day} \tScore: {self.score_total}")
+
+        if self.curr_day == self.total_days - 1:
+            self.cleanup()  # Save video
 
     def cleanup(self):
         # video - release and destroy windows
         if self.writer is not None:
             self.writer.release()
+            self.writer = None
+            logging.info(f" Saved video to: {self.video_path}")
 
 
 if __name__ == "__main__":
