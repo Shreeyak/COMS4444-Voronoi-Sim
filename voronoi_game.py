@@ -28,7 +28,6 @@ class VoronoiEngine:
         self.score_total = np.zeros((4,), dtype=int)
         self.score_curr = np.zeros((4,), dtype=int)
 
-        self.occupancy_map = self.game_map.occupancy_map
         self.history_units = {self.curr_day: copy.deepcopy(self.game_map.units)}  # Store the initial map state
         self.players = []
 
@@ -43,6 +42,16 @@ class VoronoiEngine:
             self.writer = cv2.VideoWriter(save_video, apiPreference=0, fourcc=fourcc,
                                           fps=10, frameSize=(int(1000), int(1000)))
             self.write_video()  # Save 1st frame
+
+            # a getter function
+
+    @property
+    def units(self):
+        return self.game_map.units
+
+    @property
+    def occupancy_map(self):
+        return self.game_map.occupancy_map
 
     def add_players(self, players_list: List[Player]):
         if len(players_list) != 4:
@@ -59,7 +68,7 @@ class VoronoiEngine:
 
     def write_video(self):
         if self.create_video:
-            frame = self.renderer.get_colored_occ_map(self.occupancy_map, self.game_map.units)
+            frame = self.renderer.get_colored_occ_map(self.game_map.occupancy_map, self.game_map.units)
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             self.writer.write(frame)
 
@@ -88,10 +97,8 @@ class VoronoiEngine:
         self.game_map.move_units(move_cmds)
         self.game_map.update()
 
-        self.occupancy_map = self.game_map.occupancy_map
-
         for player in range(4):
-            self.score_curr[player] = np.count_nonzero(self.occupancy_map == player)
+            self.score_curr[player] = np.count_nonzero(self.game_map.occupancy_map == player)
         self.score_total += self.score_curr
 
         # store history
