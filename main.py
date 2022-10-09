@@ -113,6 +113,7 @@ class VoronoiInterface:
             self.info_end = ""
         else:
             self.info_end = "Game ended. Press R to reset, Esc to Quit"
+            self.running = False
 
     def render(self):
         self.screen.fill((255, 255, 255))  # Blank screen
@@ -248,7 +249,7 @@ if __name__ == '__main__':
 
     game_window_height = 800
     map_size = args.map_size
-    total_days = args.days
+    total_days = 1000  # args.days
     fps = args.fps
     player_timeout = args.timeout
     spawn = args.spawn

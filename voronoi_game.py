@@ -134,6 +134,7 @@ class VoronoiEngine:
             move_cmds[player.player_idx] = moves
 
         self.game_map.move_units(move_cmds)
+        # BP HERE - CURR DAY 198
         self.game_map.update()
 
         for player in range(4):
