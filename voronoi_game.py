@@ -44,7 +44,7 @@ class VoronoiEngine:
         self.score_total = np.zeros((4,), dtype=int)
         self.score_curr = np.zeros((4,), dtype=int)
 
-        self.history_units = {self.curr_day: copy.deepcopy(self.game_map.units)}  # Store the initial map state
+        self.unit_history = {self.curr_day: copy.deepcopy(self.game_map.units)}  # Store the initial map state
         self.players = []
 
         self.add_players(player_list)
@@ -64,7 +64,7 @@ class VoronoiEngine:
         self.curr_day = -1
         self.score_total = np.zeros((4,), dtype=int)
         self.score_curr = np.zeros((4,), dtype=int)
-        self.history_units = {self.curr_day: copy.deepcopy(self.game_map.units)}
+        self.unit_history = {self.curr_day: copy.deepcopy(self.game_map.units)}
 
     @property
     def units(self):
@@ -113,7 +113,8 @@ class VoronoiEngine:
                 signal.alarm(self.player_timeout)
 
                 # MOVE UNIT
-                moves = player.play(self.game_map.units)
+                moves = player.play(self.game_map.units, self.game_map.occupancy_map, self.score_curr,
+                                    self.score_total, self.unit_history, self.curr_day, self.total_days)
 
             except TimeoutException:
                 self.logger.error(f" Timeout - Player {player.player_idx} ({player.name}) on day {self.curr_day}"
@@ -138,7 +139,7 @@ class VoronoiEngine:
         self.score_total += self.score_curr
 
         # store history
-        self.history_units[self.curr_day] = copy.deepcopy(self.game_map.units)
+        self.unit_history[self.curr_day] = copy.deepcopy(self.game_map.units)
         self.write_video()
 
         if (self.curr_day + 1) % 10 == 0:
