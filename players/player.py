@@ -48,5 +48,6 @@ class Player:
         # Move units
         units = list(units_all[self.player_idx].values())
         moves = np.ones((len(units), 2), dtype=float)
-        moves[:, 1] = 45 * np.pi / 180
+        angle = 45 - 90 * self.player_idx + 10
+        moves[:, 1] = angle * np.pi / 180
         return moves

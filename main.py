@@ -238,6 +238,8 @@ if __name__ == '__main__':
     total_days = args.days
     fps = args.fps
     player_timeout = args.timeout
+    spawn = args.spawn
+    seed = args.seed
     save_video = "game.mp4"
     seed = args.seed
 
@@ -247,12 +249,12 @@ if __name__ == '__main__':
 
     if args.no_gui:
         voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=total_days, save_video=save_video,
-                                       spawn_freq=args.spawn, player_timeout=player_timeout, seed=seed)
+                                       spawn_freq=spawn, player_timeout=player_timeout, seed=seed)
         voronoi_engine.run_all()
     else:
         user_interface = VoronoiInterface(player_list, total_days=total_days, map_size=map_size,
                                           player_timeout=player_timeout, game_window_height=game_window_height,
                                           save_video=save_video, fps=fps,
-                                          spawn_freq=args.spawn, seed=seed)
+                                          spawn_freq=spawn, seed=seed)
         user_interface.run()
 
