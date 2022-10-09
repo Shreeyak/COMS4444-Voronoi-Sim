@@ -47,7 +47,8 @@ Note: Y-axes represents columns. So a unit at `location[10, 30]` is at `cell[30,
 
 ## Dev thoughts
 
-- TODO: Complete player interface
+- TODO: Add files for g1-g8 players, inheriting the main class
+- TODO: Improve default player
 - TODO: Use Voronoi diagram - map each player to unit. Must be able to find a node/voronoi cell given
   a unit ID. Create a graph from this map. Use to identify isolated units and build occ map.
 - TODO: BFS search from the above graph to find all nodes of a given player.

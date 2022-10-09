@@ -3,6 +3,7 @@
 import atexit
 import copy
 import logging
+import signal
 from pathlib import Path
 from typing import List
 
@@ -14,8 +15,17 @@ from voronoi_map_state import VoronoiGameMap
 from voronoi_renderer import VoronoiRender
 
 
+class TimeoutException(Exception):   # Custom exception class
+    pass
+
+
+def timeout_handler(signum, frame):   # Custom signal handler
+    raise TimeoutException
+
+
 class VoronoiEngine:
-    def __init__(self, player_list, map_size=100, total_days=100, save_video=None, log=True):
+    def __init__(self, player_list, map_size=100, total_days=100, save_video=None, log=True, spawn_freq=1,
+                 player_timeout=120, seed=0):
         self.game_map = VoronoiGameMap(map_size=map_size, log=log)
         self.renderer = VoronoiRender(map_size=map_size, scale_px=10, unit_px=5)
         self.logger = logging.getLogger(__name__)
@@ -23,12 +33,18 @@ class VoronoiEngine:
             self.logger.disabled = True
         atexit.register(self.cleanup)  # Calls destructor
 
+        if seed == 0:
+            seed = None
+        self.rng = np.random.default_rng(seed)
+
+        self.spawn_freq = spawn_freq
+        self.player_timeout = player_timeout
         self.total_days = total_days
         self.curr_day = -1
         self.score_total = np.zeros((4,), dtype=int)
         self.score_curr = np.zeros((4,), dtype=int)
 
-        self.history_units = {self.curr_day: copy.deepcopy(self.game_map.units)}  # Store the initial map state
+        self.unit_history = {self.curr_day: copy.deepcopy(self.game_map.units)}  # Store the initial map state
         self.players = []
 
         self.add_players(player_list)
@@ -43,7 +59,12 @@ class VoronoiEngine:
                                           fps=10, frameSize=(int(1000), int(1000)))
             self.write_video()  # Save 1st frame
 
-            # a getter function
+    def reset(self):
+        self.game_map.reset_game()
+        self.curr_day = -1
+        self.score_total = np.zeros((4,), dtype=int)
+        self.score_curr = np.zeros((4,), dtype=int)
+        self.unit_history = {self.curr_day: copy.deepcopy(self.game_map.units)}
 
     @property
     def units(self):
@@ -59,6 +80,7 @@ class VoronoiEngine:
 
         for idx, pl in enumerate(players_list):
             pl.player_idx = idx
+            pl.set_rng(self.rng)
             self.players.append(pl)
 
     def run_all(self):
@@ -79,19 +101,34 @@ class VoronoiEngine:
             return
 
         # spawn units
-        if self.curr_day > 0:
+        if (self.curr_day + 1) % self.spawn_freq == 0:
             self.game_map.spawn_units()
 
         # move units - accept inputs from each player
         move_cmds = {}
         for player in self.players:
-            # TODO: Add a timeout
             try:
-                moves = player.play(self.game_map.units)
-            except Exception as e:
-                logging.error(f"Exception raised by Player {player.player_idx} ({player.name}). Ignoring this player.\n"
-                              f"  Error Message: {e}")
+                # Timeout
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(self.player_timeout)
+
+                # MOVE UNIT
+                moves = player.play(self.game_map.units, self.game_map.occupancy_map, self.score_curr,
+                                    self.score_total, self.unit_history, self.curr_day, self.total_days)
+
+            except TimeoutException:
+                self.logger.error(f" Timeout - Player {player.player_idx} ({player.name}) on day {self.curr_day}"
+                                  f" - play took longer than {self.player_timeout}s")
                 moves = np.zeros((len(self.game_map.units[player.player_idx]), 2), dtype=float)
+
+            except Exception as e:
+                self.logger.error(
+                    f" Exception raised by Player {player.player_idx} ({player.name}) on day {self.curr_day}. "
+                    f"NULL moves for this turn.\n"
+                    f"  Error Message: {e}")
+                moves = np.zeros((len(self.game_map.units[player.player_idx]), 2), dtype=float)
+
+            signal.alarm(0)  # Clear timeout alarm
             move_cmds[player.player_idx] = moves
 
         self.game_map.move_units(move_cmds)
@@ -102,7 +139,7 @@ class VoronoiEngine:
         self.score_total += self.score_curr
 
         # store history
-        self.history_units[self.curr_day] = copy.deepcopy(self.game_map.units)
+        self.unit_history[self.curr_day] = copy.deepcopy(self.game_map.units)
         self.write_video()
 
         if (self.curr_day + 1) % 10 == 0:

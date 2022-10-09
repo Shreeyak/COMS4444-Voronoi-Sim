@@ -2,6 +2,7 @@ import logging
 from collections import deque
 from typing import Dict, Tuple, List, Union
 
+import cv2
 import matplotlib as mpl
 import numpy as np
 import scipy
@@ -179,43 +180,27 @@ class VoronoiGameMap:
 
         return occ_map
 
-    def get_connectivity_map(self):
-        """Map of all cells that have a path to their respective home base
-        Uses a brute-force BFS search for each player, from their home base out through the occupancy map
+    def get_connectivity_map(self) -> np.ndarray:
+        """Map of all cells that have a path to their respective home base.
+        Returns:
+            np.ndarray: Connectivity map: Valid cells are marked with the player number,
+                others are set to 4 (disputed). Shape: [N, N]
         """
         occ_map = self.occupancy_map
         connected = np.ones_like(occ_map) * 4  # Default = disputed/empty
-
         for player in range(4):
-            que = deque()
-            reached = set()
-
             start = self.spawn_loc[player]
-            start = (int(start[1]), int(start[0]))
-            que.append(start)
+            start = (int(start[0]), int(start[1]))  # Convert to cell index
 
-            occ_map_ = (occ_map == player)
-            while len(que) > 0:
-                ele = que.popleft()
+            h, w = occ_map.shape
+            mask = np.zeros((h + 2, w + 2), np.uint8)
 
-                if occ_map_[ele]:
-                    connected[ele] = player
+            floodflags = 8  # Check all 8 directions
+            floodflags |= cv2.FLOODFILL_MASK_ONLY  # Don't modify orig image
+            floodflags |= (1 << 8)  # Fill mask with ones where true
 
-                    # neighbors - iter
-                    ymin = max(0, ele[0] - 1)
-                    ymax = min(connected.shape[0] - 1, ele[0] + 1)
-                    xmin = max(0, ele[1] - 1)
-                    xmax = min(connected.shape[1] - 1, ele[1] + 1)
-                    neigh = []
-                    for y in range(ymin, ymax + 1):
-                        for x in range(xmin, xmax + 1):
-                            neigh.append((y, x))
-
-                    for n in neigh:
-                        if n not in reached:
-                            que.append(n)
-                            reached.add(n)
-
+            num, im, mask, rect = cv2.floodFill(occ_map, mask, start, player, 0, 0, floodflags)
+            connected[mask[1:-1, 1:-1].astype(bool)] = player
         return connected
 
     def remove_killed_units(self) -> List[Tuple]:

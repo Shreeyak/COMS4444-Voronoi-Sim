@@ -2,40 +2,48 @@
 
 import argparse
 import atexit
+import datetime
 import logging
 
 import cv2
 import numpy as np
 import pygame
 
+import players
 from voronoi_renderer import VoronoiRender
 from voronoi_game import VoronoiEngine
-from players.player import Player
 
 
 class VoronoiInterface:
-    def __init__(self, player_list, total_days=100, map_size=100, player_timeout=300, game_window_height=800,
-                 save_video=None, fps=60):
+    def __init__(self, player_list, total_days=100, map_size=100, player_timeout=120, game_window_height=800,
+                 save_video=None, fps=60, spawn_freq=1, seed=0):
         """Interface for the Voronoi Game.
         Uses pygame to launch an interactive window
 
         Args:
+            player_list: List of Player objects. Must have 4 players.
+            total_days: Num of days in the simulation
             map_size: Width of the map in km. Each cell is 1x1km
             game_window_height: Width of the window the game will launch in
-            player_timeout: Timeout for each player
+            player_timeout: Timeout for each player in seconds. Set to 0 to disable.
+            save_video: Path to save video of game. Set to None to disable.
+            fps: Frames per second for the game. Controls speed.
+            spawn_freq: Frequency, in days, at which new units are spawned
 
         Ref:
             Pygame Design Pattern: https://www.patternsgameprog.com/discover-python-and-patterns-8-game-loop-pattern/
         """
         atexit.register(self.cleanup)  # Calls destructor
 
+        self.spawn_freq = spawn_freq
         self.map_size = map_size
         scale_px = game_window_height // map_size
         self.total_days = total_days
         # TODO: implement player list
         self.player_list = player_list
         self.game_state = VoronoiEngine(self.player_list, map_size=map_size, total_days=total_days,
-                                        save_video=None)
+                                        save_video=None, spawn_freq=spawn_freq, player_timeout=player_timeout,
+                                        seed=seed)
         self.renderer = VoronoiRender(map_size=map_size, scale_px=scale_px, unit_px=int(scale_px / 2))
 
         pygame.init()
@@ -61,8 +69,6 @@ class VoronoiInterface:
         # Game Map sub-surface
         self.occ_surf = self.screen.subsurface(pygame.Rect((0, 0), (self.renderer.img_w, self.renderer.img_h)))
 
-        # TODO: Implement player timeout
-        self.player_timeout = 3000000  # milliseconds
         self.clock = pygame.time.Clock()
         self.fps = fps
 
@@ -70,10 +76,10 @@ class VoronoiInterface:
         if save_video is not None:
             self.create_video = True
             self.video_path = save_video
-            self.frame = np.array((s_width, s_height, 3), dtype=np.uint8)
+            self.frame = np.empty((s_width, s_height, 3), dtype=np.uint8)
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # Codec. Alt: 'avc1'
             self.writer = cv2.VideoWriter(save_video, apiPreference=0, fourcc=fourcc,
-                                          fps=10, frameSize=(s_width, s_height))
+                                          fps=fps, frameSize=(s_width, s_height))
 
         # Game data
         self.reset = False
@@ -100,8 +106,7 @@ class VoronoiInterface:
         """Update the state of the game"""
         if self.reset:
             self.game_state.cleanup()
-            self.game_state = VoronoiEngine(self.player_list, map_size=map_size, total_days=total_days,
-                                            save_video=save_video)
+            self.game_state.reset()
             self.reset = False
             return
 
@@ -116,18 +121,20 @@ class VoronoiInterface:
 
         # Draw Map
         occ_img = self.renderer.get_colored_occ_map(self.game_state.occupancy_map, self.game_state.units)
-        pygame.surfarray.blit_array(self.occ_surf, np.swapaxes(occ_img, 0, 1))
+        pygame.pixelcopy.array_to_surface(self.occ_surf, np.swapaxes(occ_img, 0, 1))
 
         self.draw_text()
 
         # Update the game window to see latest changes
         pygame.display.update()
 
-        if self.create_video and self.game_state.curr_day < self.total_days - 1:
-            frame = pygame.surfarray.array3d(self.screen)
-            frame = np.swapaxes(frame, 0, 1)
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            self.writer.write(frame)
+        if self.create_video and self.writer is not None:
+            if self.game_state.curr_day < self.total_days:
+                # Don't record past end of game
+                pygame.pixelcopy.surface_to_array(self.frame, self.screen)
+                frame = np.swapaxes(self.frame, 0, 1)
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                self.writer.write(frame)
 
     def draw_text(self):
         # Draw Info text on screen surface
@@ -160,7 +167,7 @@ class VoronoiInterface:
 
     def cleanup(self):
         # video - release and destroy windows
-        if self.writer is not None:
+        if self.create_video and self.writer:
             self.writer.release()
             self.writer = None
             logging.info(f" Saved video to: {self.video_path}")
@@ -181,12 +188,51 @@ class VoronoiInterface:
         self.cleanup()
 
 
+def get_player(name: str):
+    """Gets an instance of Player class given name.
+    Name must match the filenames in player directory
+    """
+    if name == "d":
+        pl = players.player.Player()
+    elif name == "g1":
+        pl = players.g1_player.Player()
+    elif name == "g2":
+        pl = players.g2_player.Player()
+    elif name == "g3":
+        pl = players.g3_player.Player()
+    elif name == "g4":
+        pl = players.g4_player.Player()
+    elif name == "g5":
+        pl = players.g5_player.Player()
+    elif name == "g6":
+        pl = players.g6_player.Player()
+    elif name == "g7":
+        pl = players.g7_player.Player()
+    elif name == "g8":
+        pl = players.g8_player.Player()
+    else:
+        raise ValueError(f"Invalid player: {name}")
+    return pl
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='COMS 4444: Voronoi')
     parser.add_argument("--map_size", "-m", help="Size of the map in km", default=100, type=int)
     parser.add_argument("--no_gui", "-g", help="Disable GUI", action="store_true")
     parser.add_argument("--days", "-d", help="Total number of days", default=10, type=int)
+    parser.add_argument("--spawn", default=5, type=int,
+                        help="Number of days after which a new unit spawns at the homebase")
+    parser.add_argument("--player1", "-p1", default="d", help="Specifying player 1 out of 4")
+    parser.add_argument("--player2", "-p2", default="d", help="Specifying player 2 out of 4")
+    parser.add_argument("--player3", "-p3", default="d", help="Specifying player 3 out of 4")
+    parser.add_argument("--player4", "-p4", default="d", help="Specifying player 4 out of 4")
     parser.add_argument("--fps", "-f", help="Max speed of simulation", default=60, type=int)
+    parser.add_argument("--timeout", "-t", default=0, type=int,
+                        help="Timeout for each players execution. 0 to disable")
+    parser.add_argument("--seed", "-s", type=int, default=2,
+                        help="Seed used by random number generator. 0 to disable.")
+    parser.add_argument("--out_video", "-o", action="store_true",
+                        help="If passed, save a video of the run. Slows down the simulation 2x.")
     args = parser.parse_args()
 
     # logging.basicConfig(level=logging.DEBUG)
@@ -196,14 +242,27 @@ if __name__ == '__main__':
     map_size = args.map_size
     total_days = args.days
     fps = args.fps
-    save_video = "game.mp4"
+    player_timeout = args.timeout
+    spawn = args.spawn
+    seed = args.seed
+    if args.out_video:
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        save_video = f"videos/game-{now}.mp4"
+    else:
+        save_video = None
 
-    player_list = [Player(), Player(), Player(), Player()]
+    player_list = []
+    for name in [args.player1, args.player2, args.player3, args.player4]:
+        player_list.append(get_player(name))
+
     if args.no_gui:
-        voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=total_days, save_video=save_video)
+        voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=total_days, save_video=save_video,
+                                       spawn_freq=spawn, player_timeout=player_timeout, seed=seed)
         voronoi_engine.run_all()
     else:
-        user_interface = VoronoiInterface(player_list, total_days=total_days, map_size=map_size, player_timeout=300,
-                                          game_window_height=game_window_height, save_video=save_video, fps=fps)
+        user_interface = VoronoiInterface(player_list, total_days=total_days, map_size=map_size,
+                                          player_timeout=player_timeout, game_window_height=game_window_height,
+                                          save_video=save_video, fps=fps,
+                                          spawn_freq=spawn, seed=seed)
         user_interface.run()
 
