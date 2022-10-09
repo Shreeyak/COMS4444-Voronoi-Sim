@@ -8,9 +8,9 @@ import cv2
 import numpy as np
 import pygame
 
+import players
 from voronoi_renderer import VoronoiRender
 from voronoi_game import VoronoiEngine
-from players.player import Player
 
 
 class VoronoiInterface:
@@ -182,6 +182,33 @@ class VoronoiInterface:
         self.cleanup()
 
 
+def get_player(name: str):
+    """Gets an instance of Player class given name.
+    Name must match the filenames in player directory
+    """
+    if name == "d":
+        pl = players.player.Player()
+    elif name == "g1":
+        pl = players.g1_player.Player()
+    elif name == "g2":
+        pl = players.g2_player.Player()
+    elif name == "g3":
+        pl = players.g3_player.Player()
+    elif name == "g4":
+        pl = players.g4_player.Player()
+    elif name == "g5":
+        pl = players.g5_player.Player()
+    elif name == "g6":
+        pl = players.g6_player.Player()
+    elif name == "g7":
+        pl = players.g7_player.Player()
+    elif name == "g8":
+        pl = players.g8_player.Player()
+    else:
+        raise ValueError(f"Invalid player: {name}")
+    return pl
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='COMS 4444: Voronoi')
     parser.add_argument("--map_size", "-m", help="Size of the map in km", default=100, type=int)
@@ -205,7 +232,10 @@ if __name__ == '__main__':
     fps = args.fps
     save_video = "game.mp4"
 
-    player_list = [Player(), Player(), Player(), Player()]
+    player_list = []
+    for name in [args.player1, args.player2, args.player3, args.player4]:
+        player_list.append(get_player(name))
+
     if args.no_gui:
         voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=total_days, save_video=save_video,
                                        spawn_freq=args.spawn)
