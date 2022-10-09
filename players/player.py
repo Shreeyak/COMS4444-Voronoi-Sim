@@ -4,9 +4,10 @@ import numpy as np
 
 
 class Player:
-    def __init__(self):
+    def __init__(self, rng=None):
         self.player_idx = None
         self.name = "Default Player"
+        self.rng = rng
 
         # TODO: Pass game engine, to access game data
         # TODO: Get spawn point,
@@ -16,6 +17,10 @@ class Player:
     def set_player_idx(self, idx):
         """Assigns the player's index within the game engine"""
         self.player_idx = idx
+
+    def set_rng(self, rng):
+        """Assigns a random number generator"""
+        self.rng = rng
 
     def play(self, units: Dict[int, Dict[int, Dict]]):
         """Send movement commands to player's unit

@@ -15,7 +15,7 @@ from voronoi_game import VoronoiEngine
 
 class VoronoiInterface:
     def __init__(self, player_list, total_days=100, map_size=100, player_timeout=120, game_window_height=800,
-                 save_video=None, fps=60, spawn_freq=1):
+                 save_video=None, fps=60, spawn_freq=1, seed=0):
         """Interface for the Voronoi Game.
         Uses pygame to launch an interactive window
 
@@ -41,7 +41,8 @@ class VoronoiInterface:
         # TODO: implement player list
         self.player_list = player_list
         self.game_state = VoronoiEngine(self.player_list, map_size=map_size, total_days=total_days,
-                                        save_video=None, spawn_freq=spawn_freq, player_timeout=player_timeout)
+                                        save_video=None, spawn_freq=spawn_freq, player_timeout=player_timeout,
+                                        seed=seed)
         self.renderer = VoronoiRender(map_size=map_size, scale_px=scale_px, unit_px=int(scale_px / 2))
 
         pygame.init()
@@ -223,6 +224,10 @@ if __name__ == '__main__':
     parser.add_argument("--player3", "-p3", default="d", help="Specifying player 3 out of 4")
     parser.add_argument("--player4", "-p4", default="d", help="Specifying player 4 out of 4")
     parser.add_argument("--fps", "-f", help="Max speed of simulation", default=60, type=int)
+    parser.add_argument("--timeout", "-t", default=0, type=int,
+                        help="Timeout for each players execution. 0 to disable")
+    parser.add_argument("--seed", "-s", type=int, default=2,
+                        help="Seed used by random number generator. 0 to disable.")
     args = parser.parse_args()
 
     # logging.basicConfig(level=logging.DEBUG)
@@ -232,8 +237,9 @@ if __name__ == '__main__':
     map_size = args.map_size
     total_days = args.days
     fps = args.fps
-    player_timeout = args.player_timeout
+    player_timeout = args.timeout
     save_video = "game.mp4"
+    seed = args.seed
 
     player_list = []
     for name in [args.player1, args.player2, args.player3, args.player4]:
@@ -241,12 +247,12 @@ if __name__ == '__main__':
 
     if args.no_gui:
         voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=total_days, save_video=save_video,
-                                       spawn_freq=args.spawn, player_timeout=player_timeout)
+                                       spawn_freq=args.spawn, player_timeout=player_timeout, seed=seed)
         voronoi_engine.run_all()
     else:
         user_interface = VoronoiInterface(player_list, total_days=total_days, map_size=map_size,
                                           player_timeout=player_timeout, game_window_height=game_window_height,
                                           save_video=save_video, fps=fps,
-                                          spawn_freq=args.spawn)
+                                          spawn_freq=args.spawn, seed=seed)
         user_interface.run()
 
