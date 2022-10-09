@@ -255,21 +255,25 @@ class VoronoiGameMap:
             # Clip to within map bounds
             slope = np.tan(angle)
             out_bounds = (unit_pos_n < 0) | (unit_pos_n > (self.map_size - 1e-5))  # unit pos strictly less than map size
-            out_bounds = out_bounds[:, 0] | out_bounds[:, 1]
-            if np.count_nonzero(out_bounds) > 0:
-                # X-axis out of bounds
+            out_bounds_x = out_bounds[:, 0]
+            out_bounds_y = out_bounds[:, 1]
+            if np.count_nonzero(out_bounds_x) > 0:
+                # X-axis out of bounds - clip x
                 # new_y = y + ((new_x - x) * slope)
-                pos_out = unit_pos_n[out_bounds, :]  # x1, y1
+                self.logger.debug(f"X-axis out of bounds: {unit_pos_n[out_bounds_x, :]}")
+                slope_ = slope[out_bounds_x]
+                pos_out = unit_pos_n[out_bounds_x, :]  # x1, y1
                 pos_rect = np.clip(pos_out, a_min=0, a_max=self.map_size - 1e-5)  # x2, y2
-                pos_rect[out_bounds, 1] = (pos_rect - pos_out)[out_bounds, 0] * slope + pos_out[out_bounds, 1]
-                unit_pos_n[out_bounds, :] = pos_rect
-
-                # Y-axis out of bounds
+                pos_rect[:, 1] = (pos_rect - pos_out)[:, 0] * slope_ + pos_out[:, 1]
+                unit_pos_n[out_bounds_x, :] = pos_rect
+            if np.count_nonzero(out_bounds_y) > 0:
+                # Y-axis out of bounds - clip y
                 # new_x = x + ((new_y - y) / slope)
-                pos_out = unit_pos_n[out_bounds, :]  # x1, y1
+                slope_ = slope[out_bounds_y]
+                pos_out = unit_pos_n[out_bounds_y, :]  # x1, y1
                 pos_rect = np.clip(pos_out, a_min=0, a_max=self.map_size - 1e-5)  # x2, y2
-                pos_rect[out_bounds, 0] = (pos_rect - pos_out)[out_bounds, 1] / slope + pos_out[out_bounds, 0]
-                unit_pos_n[out_bounds, :] = pos_rect
+                pos_rect[:, 0] = (pos_rect - pos_out)[:, 1] / slope_ + pos_out[:, 0]
+                unit_pos_n[out_bounds_y, :] = pos_rect
 
             # Update positions
             for id_, pos in zip(self.units[player], unit_pos_n):
