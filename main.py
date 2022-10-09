@@ -14,7 +14,7 @@ from players.player import Player
 
 class VoronoiInterface:
     def __init__(self, player_list, total_days=100, map_size=100, player_timeout=300, game_window_height=800,
-                 save_video=None):
+                 save_video=None, fps=60):
         """Interface for the Voronoi Game.
         Uses pygame to launch an interactive window
 
@@ -61,6 +61,7 @@ class VoronoiInterface:
         # TODO: Implement player timeout
         self.player_timeout = 3000000  # milliseconds
         self.clock = pygame.time.Clock()
+        self.fps = fps
 
         # Game data
         self.reset = False
@@ -149,12 +150,15 @@ class VoronoiInterface:
             self.process_input()
             self.update()
             self.render()
-            self.clock.tick(60)  # Limit updates to 60 FPS. We're much slower.
+            self.clock.tick(self.fps)  # Limit updates to 60 FPS. We're much slower.
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='COMS 4444: Voronoi')
     parser.add_argument("--map_size", "-m", help="Size of the map in km", default=100, type=int)
+    parser.add_argument("--no_gui", "-g", help="Disable GUI", action="store_true")
+    parser.add_argument("--days", "-d", help="Total number of days", default=10, type=int)
+    parser.add_argument("--fps", "-f", help="Max speed of simulation", default=60, type=int)
     args = parser.parse_args()
 
     # logging.basicConfig(level=logging.DEBUG)
@@ -162,11 +166,16 @@ if __name__ == '__main__':
 
     game_window_height = 800
     map_size = args.map_size
-    total_days = 30
+    total_days = args.days
     save_video = "game.mp4"
 
     player_list = [Player(), Player(), Player(), Player()]
-    user_interface = VoronoiInterface(player_list, total_days=total_days, map_size=map_size, player_timeout=300,
-                                      game_window_height=game_window_height, save_video=save_video)
-    user_interface.run()
-    pygame.quit()
+    if args.no_gui:
+        voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=total_days, save_video=save_video)
+        voronoi_engine.run_all()
+    else:
+        user_interface = VoronoiInterface(player_list, total_days=total_days, map_size=map_size, player_timeout=300,
+                                          game_window_height=game_window_height, save_video=save_video, fps=fps)
+        user_interface.run()
+        pygame.quit()
+

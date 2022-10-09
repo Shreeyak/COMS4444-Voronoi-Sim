@@ -98,7 +98,7 @@ class VoronoiEngine:
         self.history_units[self.curr_day] = copy.deepcopy(self.game_map.units)
         self.write_video()
 
-        if self.curr_day % 10 == 0:
+        if (self.curr_day + 1) % 10 == 0:
             self.logger.info(f"Day: {self.curr_day} \tScore: {self.score_total}")
         self.logger.debug(f"Day: {self.curr_day} \tScore: {self.score_total}")
 
