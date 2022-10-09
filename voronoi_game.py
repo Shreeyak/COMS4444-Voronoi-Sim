@@ -25,8 +25,8 @@ class VoronoiEngine:
 
         self.total_days = total_days
         self.curr_day = -1
-        self.score_total = np.zeros((4,), dtype=float)
-        self.score_curr = np.zeros((4,), dtype=float)
+        self.score_total = np.zeros((4,), dtype=int)
+        self.score_curr = np.zeros((4,), dtype=int)
 
         self.occupancy_map = self.game_map.occupancy_map
         self.history_units = {self.curr_day: copy.deepcopy(self.game_map.units)}  # Store the initial map state

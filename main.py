@@ -13,21 +13,21 @@ from players.player import Player
 
 
 class VoronoiInterface:
-    def __init__(self, player_list, total_days=100, map_size=100, player_timeout=300, game_window_width=800,
+    def __init__(self, player_list, total_days=100, map_size=100, player_timeout=300, game_window_height=800,
                  save_video=None):
         """Interface for the Voronoi Game.
         Uses pygame to launch an interactive window
 
         Args:
             map_size: Width of the map in km. Each cell is 1x1km
-            game_window_width: Width of the window the game will launch in
+            game_window_height: Width of the window the game will launch in
             player_timeout: Timeout for each player
 
         Ref:
             Pygame Design Pattern: https://www.patternsgameprog.com/discover-python-and-patterns-8-game-loop-pattern/
         """
         self.map_size = map_size
-        scale_px = game_window_width // map_size
+        scale_px = game_window_height // map_size
         self.total_days = total_days
         # TODO: implement player list
         self.player_list = player_list
@@ -41,17 +41,20 @@ class VoronoiInterface:
         self.running = True
 
         # pygame creates Surface objects on which it draws graphics. Surfaces can be layered on top of each other.
-        # Window contains the map and a section below it for text
-        text_h = 40  # Height of text info box
-        s_width = self.renderer.img_w
-        s_height = self.renderer.img_h + text_h
+        # Window contains the map and a section to the right for text
+        text_w = int(game_window_height * 0.77)  # Width of text info box
+        s_width = self.renderer.img_w + text_w
+        s_height = self.renderer.img_h
 
         # Main surface (game window). X-right, Y-down (not numpy format)
         flags = pygame.SHOWN  # | pygame.OPENGL
         self.screen = pygame.display.set_mode((s_width, s_height), flags=flags)
         # Text sub-surface
-        self.text_box_surf = self.screen.subsurface(pygame.Rect((0, self.renderer.img_h), (self.renderer.img_w, text_h)))
+        self.text_box_surf = self.screen.subsurface(pygame.Rect((self.renderer.img_w, 0),
+                                                                (text_w, self.renderer.img_h)))
         self.font = pygame.font.SysFont(None, 32)  # To create text
+        self.info_end = ""  # Add text info
+
         # Game Map sub-surface
         self.occ_surf = self.screen.subsurface(pygame.Rect((0, 0), (self.renderer.img_w, self.renderer.img_h)))
 
@@ -91,6 +94,9 @@ class VoronoiInterface:
 
         if self.game_state.curr_day < self.total_days - 1:
             self.game_state.progress_day()
+            self.info_end = ""
+        else:
+            self.info_end = "Game ended. Press R to reset, Esc to Quit"
 
     def render(self):
         self.screen.fill((255, 255, 255))  # Blank screen
@@ -99,18 +105,39 @@ class VoronoiInterface:
         occ_img = self.renderer.get_colored_occ_map(self.game_state.occupancy_map, self.game_state.game_map.units)
         pygame.pixelcopy.array_to_surface(self.occ_surf, np.swapaxes(occ_img, 0, 1))
 
-        # Draw Info text on screen surface
-        self.text_box_surf.fill((255, 255, 255))  # White background for text
-        box_rect = self.text_box_surf.get_rect()
-
-        info_text = f"Day: {self.game_state.curr_day} / {self.total_days - 1}"
-        color = (0, 0, 0)
-        text_surf = self.font.render(info_text, True, color)
-        text_rect = text_surf.get_rect(center=box_rect.center)  # Position surface at center of text box
-        self.text_box_surf.blit(text_surf, text_rect.topleft)  # Draw text on text box
+        self.draw_text()
 
         # Update the game window to see latest changes
         pygame.display.update()
+
+    def draw_text(self):
+        # Draw Info text on screen surface
+        self.text_box_surf.fill((247, 233, 218))  # White background for text
+        box_rect = self.text_box_surf.get_rect()
+        color = (0, 0, 0)
+        pad_v = 0.1 * box_rect.height
+        pad_top = 0.25 * box_rect.height
+        pad_left = 0.2 * box_rect.width
+
+        # Day count
+        info_text = f"Day: {self.game_state.curr_day} / {self.total_days - 1}"
+        text_surf = self.font.render(info_text, True, color)
+        text_rect = text_surf.get_rect(midtop=box_rect.midtop)  # Position surface at center of text box
+        text_rect.top += pad_top
+        self.text_box_surf.blit(text_surf, text_rect.topleft)  # Draw text on text box
+
+        # Player Count + msg
+        info_text = f"Player 1 ({self.player_list[0].name}): {self.game_state.score_total[0]:,}\n" \
+                    f"Player 2 ({self.player_list[1].name}): {self.game_state.score_total[1]:,}\n" \
+                    f"Player 3 ({self.player_list[2].name}): {self.game_state.score_total[2]:,}\n" \
+                    f"Player 4 ({self.player_list[3].name}): {self.game_state.score_total[3]:,}\n"
+        info_text += self.info_end
+        text_lines = info_text.split("\n")
+        for idx, line in enumerate(text_lines):
+            text_surf = self.font.render(line, True, color)
+            text_rect = text_surf.get_rect(left=box_rect.left+pad_left, top=box_rect.top)  # Position surface at center of text box
+            text_rect.top += pad_top + (pad_v * (idx + 1))
+            self.text_box_surf.blit(text_surf, text_rect.topleft)  # Draw text on text box
 
     def run(self):
         print(f"\nStarting pygame.")
@@ -130,15 +157,16 @@ if __name__ == '__main__':
     parser.add_argument("--map_size", "-m", help="Size of the map in km", default=100, type=int)
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG)
+    # logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
-    game_window_width = 800
+    game_window_height = 800
     map_size = args.map_size
-    total_days = 1000
+    total_days = 30
     save_video = "game.mp4"
 
     player_list = [Player(), Player(), Player(), Player()]
     user_interface = VoronoiInterface(player_list, total_days=total_days, map_size=map_size, player_timeout=300,
-                                      game_window_width=game_window_width, save_video=save_video)
+                                      game_window_height=game_window_height, save_video=save_video)
     user_interface.run()
     pygame.quit()
