@@ -230,10 +230,10 @@ if __name__ == '__main__':
     parser.add_argument("--days", "-d", help="Total number of days", default=10, type=int)
     parser.add_argument("--spawn", default=5, type=int,
                         help="Number of days after which a new unit spawns at the homebase")
-    parser.add_argument("--player1", "-p1", default="d", help="Specifying player 1 out of 4")
-    parser.add_argument("--player2", "-p2", default="d", help="Specifying player 2 out of 4")
-    parser.add_argument("--player3", "-p3", default="d", help="Specifying player 3 out of 4")
-    parser.add_argument("--player4", "-p4", default="d", help="Specifying player 4 out of 4")
+    parser.add_argument("--player1", "-p1", default="d", help="Specify player 1 out of 4. Integer equal to player id.")
+    parser.add_argument("--player2", "-p2", default="d", help="Specify player 2 out of 4. Integer equal to player id.")
+    parser.add_argument("--player3", "-p3", default="d", help="Specify player 3 out of 4. Integer equal to player id.")
+    parser.add_argument("--player4", "-p4", default="d", help="Specify player 4 out of 4. Integer equal to player id.")
     parser.add_argument("--fps", "-f", help="Max speed of simulation", default=60, type=int)
     parser.add_argument("--timeout", "-t", default=0, type=int,
                         help="Timeout for each players execution. 0 to disable")
