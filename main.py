@@ -151,10 +151,10 @@ class VoronoiInterface:
         self.text_box_surf.blit(text_surf, text_rect.topleft)  # Draw text on text box
 
         # Player Count + msg
-        info_text = f"Player 1 ({self.game_state.player_names[0]}): {self.game_state.score_total[0]:,}\n" \
-                    f"Player 2 ({self.game_state.player_names[0]}): {self.game_state.score_total[1]:,}\n" \
-                    f"Player 3 ({self.game_state.player_names[0]}): {self.game_state.score_total[2]:,}\n" \
-                    f"Player 4 ({self.game_state.player_names[0]}): {self.game_state.score_total[3]:,}\n"
+        info_text = f"Player 1 (G {self.game_state.player_names[0]}): {self.game_state.score_total[0]:,}\n" \
+                    f"Player 2 (G {self.game_state.player_names[1]}): {self.game_state.score_total[1]:,}\n" \
+                    f"Player 3 (G {self.game_state.player_names[2]}): {self.game_state.score_total[2]:,}\n" \
+                    f"Player 4 (G {self.game_state.player_names[3]}): {self.game_state.score_total[3]:,}\n"
         info_text += self.info_end
         text_lines = info_text.split("\n")
         for idx, line in enumerate(text_lines):
@@ -194,30 +194,30 @@ def get_player(name: str):
     if name == "d":
         from players.default_player import Player as DefPlayer
         pl_cls = DefPlayer
-    # elif name == "g1":
-    #     from players.g1_player import G1Player
-    #     pl_cls = G1Player
-    # elif name == "g2":
-    #     from players.g2_player import G2Player
-    #     pl_cls = G2Player
-    # elif name == "g3":
-    #     from players.g3_player import G3Player
-    #     pl_cls = G3Player
-    # elif name == "g4":
-    #     from players.g4_player import G4Player
-    #     pl_cls = G4Player
-    # elif name == "g5":
-    #     from players.g5_player import G5Player
-    #     pl_cls = G5Player
-    # elif name == "g6":
-    #     from players.g6_player import G6Player
-    #     pl_cls = G6Player
-    # elif name == "g7":
-    #     from players.g7_player import G7Player
-    #     pl_cls = G7Player
-    # elif name == "g8":
-    #     from players.g8_player import G8Player
-    #     pl_cls = G8Player
+    elif name == "1":
+        from players.g1_player import Player as G1Player
+        pl_cls = G1Player
+    elif name == "2":
+        from players.g2_player import Player as G2Player
+        pl_cls = G2Player
+    elif name == "3":
+        from players.g3_player import Player as G3Player
+        pl_cls = G3Player
+    elif name == "4":
+        from players.g4_player import Player as G4Player
+        pl_cls = G4Player
+    elif name == "5":
+        from players.g5_player import Player as G5Player
+        pl_cls = G5Player
+    elif name == "6":
+        from players.g6_player import Player as G6Player
+        pl_cls = G6Player
+    elif name == "7":
+        from players.g7_player import Player as G7Player
+        pl_cls = G7Player
+    elif name == "8":
+        from players.g8_player import Player as G8Player
+        pl_cls = G8Player
     else:
         raise ValueError(f"Invalid player: {name}. Must be one of 'd' or 'g1 - g8'")
     return pl_cls
