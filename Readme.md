@@ -20,9 +20,9 @@ python main.py --days 100 --spawn 5 -p1 d -p2 1 -p3 8 -p4 5
 
 Usage:
 ```
-usage: main.py [-h] [--map_size MAP_SIZE] [--no_gui] [--days DAYS] [--spawn SPAWN]
-     [--player1 PLAYER1] [--player2 PLAYER2] [--player3 PLAYER3] [--player4 PLAYER4] 
-     [--fps FPS] [--timeout TIMEOUT] [--seed SEED] [--out_video]
+usage: main.py [-h] [--map_size MAP_SIZE] [--no_gui] [--days DAYS] [--spawn SPAWN] 
+    [--player1 PLAYER1] [--player2 PLAYER2] [--player3 PLAYER3] [--player4 PLAYER4] 
+    [--fps FPS] [--timeout TIMEOUT] [--seed SEED] [--out_video]
 
 COMS 4444: Voronoi
 
@@ -34,13 +34,13 @@ optional arguments:
   --days DAYS, -d DAYS  Total number of days
   --spawn SPAWN         Number of days after which a new unit spawns at the homebase
   --player1 PLAYER1, -p1 PLAYER1
-                        Specifying player 1 out of 4
+                        Specify player 1 out of 4. Integer equal to player id.
   --player2 PLAYER2, -p2 PLAYER2
-                        Specifying player 2 out of 4
+                        Specify player 2 out of 4. Integer equal to player id.
   --player3 PLAYER3, -p3 PLAYER3
-                        Specifying player 3 out of 4
+                        Specify player 3 out of 4. Integer equal to player id.
   --player4 PLAYER4, -p4 PLAYER4
-                        Specifying player 4 out of 4
+                        Specify player 4 out of 4. Integer equal to player id.
   --fps FPS, -f FPS     Max speed of simulation
   --timeout TIMEOUT, -t TIMEOUT
                         Timeout for each players execution. 0 to disable
