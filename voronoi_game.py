@@ -3,6 +3,7 @@
 import atexit
 import copy
 import logging
+import pickle
 import signal
 import traceback
 from pathlib import Path
@@ -115,6 +116,7 @@ class VoronoiEngine:
                 # MOVE UNIT
                 moves = player.play(self.game_map.units, self.game_map.occupancy_map, self.score_curr,
                                     self.score_total, self.unit_history, self.curr_day, self.total_days)
+                moves = np.array(moves)
 
             except TimeoutException:
                 self.logger.error(f" Timeout - Player {player.player_idx} ({player.name}) on day {self.curr_day}"
@@ -157,6 +159,11 @@ class VoronoiEngine:
             self.writer.release()
             self.writer = None
             logging.info(f" Saved video to: {self.video_path}")
+
+    def save_units_history_to_file(self, path="tests/units_history.pkl"):
+        """Saves the units pos to file"""
+        with open(path, "wb") as fd:
+            pickle.dump(self.unit_history, fd, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == "__main__":
