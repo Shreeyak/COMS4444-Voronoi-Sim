@@ -11,7 +11,6 @@ from typing import Callable, List, Tuple
 
 import cv2
 import numpy as np
-import sympy
 import shapely.geometry
 
 from players.default_player import Player
@@ -86,7 +85,7 @@ class VoronoiEngine:
         for idx, (name, PlayerCls) in enumerate(players_list):
             # pl = PlayerCls(idx, self.rng, self.game_map.spawn_loc[idx])
 
-            spawn_point = sympy.Point2D(self.game_map.spawn_loc[idx])
+            spawn_point = shapely.geometry.Point(self.game_map.spawn_loc[idx])
             precomp_dir = None
             pl = PlayerCls( self.rng, self.logger, self.total_days, self.spawn_freq,
                  idx, spawn_point, 0, self.game_map.map_size, precomp_dir)
@@ -136,16 +135,23 @@ class VoronoiEngine:
                 current_scores = self.score_curr.tolist()
                 total_scores = self.score_total.tolist()
                 moves_ = player.play(unit_id, unit_pos, map_states, current_scores, total_scores)
-                # Convert sympy shit to floats
-                moves_ = [(float(dist), float(angle)) for dist, angle in moves_]
-                moves = np.array(moves_)
-                # Nan angle:
-                nan_val = np.isnan(moves)
-                if np.any(nan_val):
-                    nan_val = nan_val[:, 0] | nan_val[:, 1]
-                    moves[nan_val] = 0
-                    self.logger.warning(f"Player {player.player_idx} ({self.player_names[player.player_idx]}) on day "
-                                      f"{self.curr_day} provided invalid move. Using 0 dist for that unit.")
+
+                # Check return values are correct
+                if len(moves_) != len(unit_pos[player.player_idx]):
+                    self.logger.warning(f"Player {player.player_idx} ({self.player_names[player.player_idx]}) "
+                                        f"provided invalid moves: Length of moves ({len(moves_)}) "
+                                        f"must be same as num of units ({len(unit_pos[player.player_idx])}). "
+                                        f"Using 0 dist for all units.")
+                    moves = np.zeros((len(self.game_map.units[player.player_idx]), 2), dtype=float)
+                else:
+                    moves = np.array(moves_).astype(float)
+                    # Nan angle:
+                    nan_val = np.isnan(moves)
+                    if np.any(nan_val):
+                        nan_val = nan_val[:, 0] | nan_val[:, 1]
+                        moves[nan_val] = 0
+                        self.logger.warning(f"Player {player.player_idx} ({self.player_names[player.player_idx]}) on day "
+                                          f"{self.curr_day} provided invalid move. Using 0 dist for that unit.")
 
             except TimeoutException:
                 self.logger.error(f" Timeout - Player {player.player_idx} ({self.player_names[player.player_idx]}) "
