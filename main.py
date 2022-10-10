@@ -42,7 +42,6 @@ class VoronoiInterface:
                                         save_video=None, spawn_freq=spawn_freq, player_timeout=player_timeout,
                                         seed=seed)
         self.renderer = VoronoiRender(map_size=map_size, scale_px=scale_px, unit_px=int(scale_px / 2))
-        self.player_list = self.game_state.players
 
         pygame.init()
         caption = "COMS 4444: Voronoi"
@@ -152,10 +151,10 @@ class VoronoiInterface:
         self.text_box_surf.blit(text_surf, text_rect.topleft)  # Draw text on text box
 
         # Player Count + msg
-        info_text = f"Player 1 ({self.player_list[0].name}): {self.game_state.score_total[0]:,}\n" \
-                    f"Player 2 ({self.player_list[1].name}): {self.game_state.score_total[1]:,}\n" \
-                    f"Player 3 ({self.player_list[2].name}): {self.game_state.score_total[2]:,}\n" \
-                    f"Player 4 ({self.player_list[3].name}): {self.game_state.score_total[3]:,}\n"
+        info_text = f"Player 1 (G {self.game_state.player_names[0]}): {self.game_state.score_total[0]:,}\n" \
+                    f"Player 2 (G {self.game_state.player_names[1]}): {self.game_state.score_total[1]:,}\n" \
+                    f"Player 3 (G {self.game_state.player_names[2]}): {self.game_state.score_total[2]:,}\n" \
+                    f"Player 4 (G {self.game_state.player_names[3]}): {self.game_state.score_total[3]:,}\n"
         info_text += self.info_end
         text_lines = info_text.split("\n")
         for idx, line in enumerate(text_lines):
@@ -193,31 +192,31 @@ def get_player(name: str):
     """
     # Avoid exceptions due to errors in other players code
     if name == "d":
-        from players.player import Player
-        pl_cls = Player
-    elif name == "g1":
-        from players.g1_player import G1Player
+        from players.default_player import Player as DefPlayer
+        pl_cls = DefPlayer
+    elif name == "1":
+        from players.g1_player import Player as G1Player
         pl_cls = G1Player
-    elif name == "g2":
-        from players.g2_player import G2Player
+    elif name == "2":
+        from players.g2_player import Player as G2Player
         pl_cls = G2Player
-    elif name == "g3":
-        from players.g3_player import G3Player
+    elif name == "3":
+        from players.g3_player import Player as G3Player
         pl_cls = G3Player
-    elif name == "g4":
-        from players.g4_player import G4Player
+    elif name == "4":
+        from players.g4_player import Player as G4Player
         pl_cls = G4Player
-    elif name == "g5":
-        from players.g5_player import G5Player
+    elif name == "5":
+        from players.g5_player import Player as G5Player
         pl_cls = G5Player
-    elif name == "g6":
-        from players.g6_player import G6Player
+    elif name == "6":
+        from players.g6_player import Player as G6Player
         pl_cls = G6Player
-    elif name == "g7":
-        from players.g7_player import G7Player
+    elif name == "7":
+        from players.g7_player import Player as G7Player
         pl_cls = G7Player
-    elif name == "g8":
-        from players.g8_player import G8Player
+    elif name == "8":
+        from players.g8_player import Player as G8Player
         pl_cls = G8Player
     else:
         raise ValueError(f"Invalid player: {name}. Must be one of 'd' or 'g1 - g8'")
@@ -260,9 +259,8 @@ if __name__ == '__main__':
     else:
         save_video = None
 
-    player_list = []
-    for name in [args.player1, args.player2, args.player3, args.player4]:
-        player_list.append(get_player(name))
+    player_name_list = [args.player1, args.player2, args.player3, args.player4]
+    player_list = [(name, get_player(name)) for name in player_name_list]
 
     if args.no_gui:
         voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=total_days, save_video=save_video,

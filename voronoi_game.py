@@ -7,12 +7,13 @@ import pickle
 import signal
 import traceback
 from pathlib import Path
-from typing import Callable, List
+from typing import Callable, List, Tuple
 
 import cv2
 import numpy as np
+import shapely.geometry
 
-from players.player import Player
+from players.default_player import Player
 from voronoi_map_state import VoronoiGameMap
 from voronoi_renderer import VoronoiRender
 
@@ -48,6 +49,7 @@ class VoronoiEngine:
 
         self.unit_history = {self.curr_day: copy.deepcopy(self.game_map.units)}  # Store the initial map state
         self.players = []
+        self.player_names = []
 
         self.add_players(player_list)
 
@@ -76,13 +78,19 @@ class VoronoiEngine:
     def occupancy_map(self):
         return self.game_map.occupancy_map
 
-    def add_players(self, players_list: List[Callable]):
+    def add_players(self, players_list: List[Tuple[str, Callable]]):
         if len(players_list) != 4:
             raise ValueError(f"Must have 4 players in the game. Provided: {len(players_list)}")
 
-        for idx, PlayerCls in enumerate(players_list):
-            pl = PlayerCls(idx, self.rng, self.game_map.spawn_loc[idx])
+        for idx, (name, PlayerCls) in enumerate(players_list):
+            # pl = PlayerCls(idx, self.rng, self.game_map.spawn_loc[idx])
+
+            spawn_point = shapely.geometry.Point(self.game_map.spawn_loc[idx])
+            precomp_dir = None
+            pl = PlayerCls( self.rng, self.logger, self.total_days, self.spawn_freq,
+                 idx, spawn_point, 0, self.game_map.map_size, precomp_dir)
             self.players.append(pl)
+            self.player_names.append(name)
 
     def run_all(self):
         for _ in range(self.total_days):
@@ -114,25 +122,53 @@ class VoronoiEngine:
                 signal.alarm(self.player_timeout)
 
                 # MOVE UNIT
-                moves = player.play(self.game_map.units, self.game_map.occupancy_map, self.score_curr,
-                                    self.score_total, self.unit_history, self.curr_day, self.total_days)
-                moves = np.array(moves)
+                # moves = player.play(self.game_map.units, self.game_map.occupancy_map, self.score_curr,
+                #                     self.score_total, self.unit_history, self.curr_day, self.total_days)
+
+                # Cast all data to the format of official player
+                unit_pos = []  # u[player][pos]
+                unit_id = []
+                for idx in range(4):
+                    unit_pos.append([shapely.geometry.Point(pos) for id, pos in self.units[idx].items()])
+                    unit_id.append([id for id, pos in self.units[idx].items()])
+                map_states = (self.occupancy_map + 1).tolist()
+                current_scores = self.score_curr.tolist()
+                total_scores = self.score_total.tolist()
+                moves_ = player.play(unit_id, unit_pos, map_states, current_scores, total_scores)
+
+                # Check return values are correct
+                if len(moves_) != len(unit_pos[player.player_idx]):
+                    self.logger.warning(f"Player {player.player_idx} ({self.player_names[player.player_idx]}) "
+                                        f"provided invalid moves: Length of moves ({len(moves_)}) "
+                                        f"must be same as num of units ({len(unit_pos[player.player_idx])}). "
+                                        f"Using 0 dist for all units.")
+                    moves = np.zeros((len(self.game_map.units[player.player_idx]), 2), dtype=float)
+                else:
+                    moves = np.array(moves_).astype(float)
+                    # Nan angle:
+                    nan_val = np.isnan(moves)
+                    if np.any(nan_val):
+                        nan_val = nan_val[:, 0] | nan_val[:, 1]
+                        moves[nan_val] = 0
+                        self.logger.warning(f"Player {player.player_idx} ({self.player_names[player.player_idx]}) on day "
+                                          f"{self.curr_day} provided invalid move. Using 0 dist for that unit.")
 
             except TimeoutException:
-                self.logger.error(f" Timeout - Player {player.player_idx} ({player.name}) on day {self.curr_day}"
-                                  f" - play took longer than {self.player_timeout}s\n"
+                self.logger.error(f" Timeout - Player {player.player_idx} ({self.player_names[player.player_idx]}) "
+                                  f"on day {self.curr_day} - play took longer than {self.player_timeout}s\n"
                                   f"NULL moves for this turn.")
                 moves = np.zeros((len(self.game_map.units[player.player_idx]), 2), dtype=float)
 
             except Exception as e:
                 self.logger.error(
-                    f" Exception raised by Player {player.player_idx} ({player.name}) on day {self.curr_day}. "
-                    f"NULL moves for this turn.\n"
+                    f" Exception raised by Player {player.player_idx} ({self.player_names[player.player_idx]}) "
+                    f"on day {self.curr_day}. NULL moves for this turn.\n"
                     f"  Error Message: {e}\n"
                     f"{traceback.format_exc()}")
                 moves = np.zeros((len(self.game_map.units[player.player_idx]), 2), dtype=float)
 
             signal.alarm(0)  # Clear timeout alarm
+
             move_cmds[player.player_idx] = moves
 
         self.game_map.move_units(move_cmds)

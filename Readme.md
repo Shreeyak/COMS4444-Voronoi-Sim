@@ -104,6 +104,8 @@ python main_interactive.py [-m <map_size>]
 
 # Dev thoughts
 
+- TODO: GAME slows down as it progresses
+- TODO: PR to TA to make return of player moves floats
 - TODO: Use Voronoi diagram - map each player to unit. Must be able to find a node/voronoi cell given
   a unit ID. Create a graph from this map. Use to identify isolated units and build occ map.
 - TODO: BFS search from the above graph to find all nodes of a given player.

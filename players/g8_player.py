@@ -1,54 +1,84 @@
-from typing import Dict, Tuple
-
+import os
+import pickle
 import numpy as np
+import logging
+from typing import Tuple
+import shapely.geometry
 
-from players.player import Player
 
+class Player:
+    def __init__(self, rng: np.random.Generator, logger: logging.Logger, total_days: int, spawn_days: int,
+                 player_idx: int, spawn_point: shapely.geometry.Point, min_dim: int, max_dim: int, precomp_dir: str) \
+            -> None:
+        """Initialise the player with given skill.
 
-class G8Player(Player):
-    def __init__(self, player_idx, rng, spawn_pt):
-        super().__init__(player_idx, rng, spawn_pt)
-        self.name = "G8 Player"
-
-    def play(self,
-             units_all: Dict[int, Dict[int, Tuple]],
-             occupancy_map: np.ndarray,
-             current_scores: np.ndarray,
-             total_scores: np.ndarray,
-             unit_history: Dict[int, Dict],
-             curr_day: int,
-             total_days: int):
-        """Send movement commands to player's unit
-
-        Args:
-            units_all: Dict of all units - {player: {id: (pos_x, posy_)}}
-            occupancy_map: Which unit occupies each cell on the grid. Shape: (N, N).
-                Values 0-3 = player, 4 = contested
-            current_scores: Current score for each player. Shape: (4,)
-            total_scores: Total cumulative score for each player. Shape: (4,)
-            unit_history: History of unit position over all previous days - {day: {player: {id: (posx, posy)}}}
-            curr_day: Current day in simulation
-            total_days: Total number of days
-
-        Returns:
-            np.ndarray: Direction and Angle for each of this player's units. Shape: [N, 2]
-                0 deg = right, 90 deg = down
+            Args:
+                rng (np.random.Generator): numpy random number generator, use this for same player behavior across run
+                logger (logging.Logger): logger use this like logger.info("message")
+                total_days (int): total number of days, the game is played
+                spawn_days (int): number of days after which new units spawn
+                player_idx (int): index used to identify the player among the four possible players
+                spawn_point (Tuple): Homebase of the player. Shape: (2,)
+                min_dim (int): Minimum boundary of the square map
+                max_dim (int): Maximum boundary of the square map
+                precomp_dir (str): Directory path to store/load pre-computation
         """
-        # Convert params to previous format
-        game_states = occupancy_map.T.tolist()
-        unit_id = []  # List, Shape: [N]
-        unit_pos = []  # List, Shape: [N, 2], N = num of units
-        for player in range(4):
-            unit_id.append(list(units_all[player].keys()))
-            unit_pos.append(list(units_all[player].values()))
-        current_scores = current_scores.tolist()
-        total_scores = total_scores.tolist()
 
-        # === Add your code below this === #
+        # precomp_path = os.path.join(precomp_dir, "{}.pkl".format(map_path))
 
-        # Move units - 0 deg = right, 90 deg = down
-        units = np.array(unit_pos[self.player_idx])  # Shape: [N, 2]
-        moves = np.ones_like(units)
-        angle = 45 - (90 * self.player_idx)  # towards center
-        moves[:, 1] = angle * np.pi / 180
+        # # precompute check
+        # if os.path.isfile(precomp_path):
+        #     # Getting back the objects:
+        #     with open(precomp_path, "rb") as f:
+        #         self.obj0, self.obj1, self.obj2 = pickle.load(f)
+        # else:
+        #     # Compute objects to store
+        #     self.obj0, self.obj1, self.obj2 = _
+
+        #     # Dump the objects
+        #     with open(precomp_path, 'wb') as f:
+        #         pickle.dump([self.obj0, self.obj1, self.obj2], f)
+
+        self.rng = rng
+        self.logger = logger
+        self.player_idx = player_idx
+
+    def play(self, unit_id, unit_pos, map_states, current_scores, total_scores) -> [Tuple[float, float]]:
+        """Function which based on current game state returns the distance and angle of each unit active on the board
+
+                Args:
+                    unit_id (list(list(str))): contains the ids of each player's units (unit_id[player_idx][x])
+                    unit_pos (list(list(shapely.geometry.Point))): contains the position of each unit currently present
+                                                    on the map (unit_pos[player_idx][x])
+                    map_states (list(list(int)): contains the state of each cell, using the x, y coordinate system
+                                                    (map_states[x][y])
+                    current_scores (list(int)): contains the number of cells currently occupied by each player
+                                                    (current_scores[player_idx])
+                    total_scores (list(int)): contains the cumulative scores up until the current day
+                                                    (total_scores[player_idx]
+
+                Returns:
+                    List[Tuple[float, float]]: Return a list of tuples consisting of distance and angle in radians
+                        to move each unit of the player.
+                """
+
+        moves = []
+        for i in range(len(unit_id[self.player_idx])):
+            if self.player_idx == 0:
+                distance = min(1, 100 - unit_pos[self.player_idx][i].x)
+                angle = np.arctan2(100 - unit_pos[self.player_idx][i].y, 100 - unit_pos[self.player_idx][i].x)
+                moves.append((distance, angle))
+            elif self.player_idx == 1:
+                distance = min(1, 100 - unit_pos[self.player_idx][i].x)
+                angle = np.arctan2(0.5 - unit_pos[self.player_idx][i].y, 0.5 - unit_pos[self.player_idx][i].x)
+                moves.append((distance, angle))
+            elif self.player_idx == 2:
+                distance = min(1.0, self.rng.random())
+                angle = np.arctan2(-self.rng.random(), -self.rng.random())
+                moves.append((distance, angle))
+            else:
+                distance = min(1, 0)
+                angle = np.arctan2(0, 1)
+                moves.append((distance, angle))
+
         return moves
