@@ -35,22 +35,20 @@ class G4Player(Player):
                 0 deg = right, 90 deg = down
         """
         # Convert params to previous format
-        # game_states = occupancy_map.tolist()
+        game_states = occupancy_map.T.tolist()
         unit_id = []  # List, Shape: [N]
         unit_pos = []  # List, Shape: [N, 2], N = num of units
         for player in range(4):
-            unit_id.append(np.array(list(units_all[player].keys())))
-            unit_pos.append(np.array(list(units_all[player].values())))
+            unit_id.append(list(units_all[player].keys()))
+            unit_pos.append(list(units_all[player].values()))
+        current_scores = current_scores.tolist()
+        total_scores = total_scores.tolist()
+
+        # === Add your code below this === #
 
         # Move units - 0 deg = right, 90 deg = down
-        units = unit_pos[self.player_idx]  # Shape: [N, 2]
+        units = np.array(unit_pos[self.player_idx])  # Shape: [N, 2]
         moves = np.ones_like(units)
         angle = 45 - (90 * self.player_idx)  # towards center
         moves[:, 1] = angle * np.pi / 180
-
-        # move towards nearest enemy unit
-        # units_enemy = [unit_pos[x] for x in range(4) if x != self.player_idx]
-        # units_enemy = np.concatenate(units_enemy, axis=0)  # [N, 2]
-        # kdtree = scipy.spatial.KDTree(units_enemy)
-
         return moves
