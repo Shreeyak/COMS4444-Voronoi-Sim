@@ -2,7 +2,7 @@ from typing import Dict, Tuple
 
 import numpy as np
 
-from players.player import Player
+from players.default_player import Player
 
 
 class G5Player(Player):

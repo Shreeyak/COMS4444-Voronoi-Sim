@@ -293,8 +293,8 @@ class VoronoiGameMap:
                                  f"Number of move commands ({move.shape}) must match num of units ({unit_pos.shape})")
 
             # Clip to max distance and move
-            dist = move[:, 0]
-            angle = move[:, 1]
+            dist = move[:, 0].astype(float)
+            angle = move[:, 1].astype(float)
             dist = np.clip(dist, a_max=max_dist, a_min=None)
             unit_pos_n[:, 0] = unit_pos[:, 0] + dist * np.cos(angle)
             unit_pos_n[:, 1] = unit_pos[:, 1] + dist * np.sin(angle)
@@ -321,6 +321,11 @@ class VoronoiGameMap:
                 pos_rect = np.clip(pos_out, a_min=0, a_max=self.map_size - 1e-5)  # x2, y2
                 pos_rect[:, 0] = (pos_rect - pos_out)[:, 1] / slope_ + pos_out[:, 0]
                 unit_pos_n[out_bounds_y, :] = pos_rect
+
+            # Error - pos Nan after move
+            nan_pos = np.isnan(unit_pos_n)
+            if np.any(nan_pos):
+                raise ValueError("Nan pos found")
 
             # Update positions
             for id_, pos in zip(self.units[player], unit_pos_n):
