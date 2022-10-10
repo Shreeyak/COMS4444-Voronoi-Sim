@@ -87,8 +87,8 @@ class VoronoiEngine:
 
             spawn_point = shapely.geometry.Point(self.game_map.spawn_loc[idx])
             precomp_dir = None
-            pl = PlayerCls( self.rng, self.logger, self.total_days, self.spawn_freq,
-                 idx, spawn_point, 0, self.game_map.map_size, precomp_dir)
+            pl = PlayerCls(self.rng, self.logger, self.total_days, self.spawn_freq,
+                           idx, spawn_point, 0, self.game_map.map_size, precomp_dir)
             self.players.append(pl)
             self.player_names.append(name)
 
