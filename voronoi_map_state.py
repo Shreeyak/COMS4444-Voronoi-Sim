@@ -1,11 +1,16 @@
 import logging
-from collections import deque
-from typing import Dict, Tuple, List, Union
+import pickle
+from typing import Dict, List, Tuple
 
 import cv2
 import matplotlib as mpl
 import numpy as np
 import scipy
+from matplotlib import pyplot as plt
+
+mpl.use('TkAgg')  # For macOS. Can change engine if Tk gives issues.
+
+from voronoi_renderer import VoronoiRender
 
 
 def _compute_cell_coords(map_size) -> np.ndarray:
@@ -48,6 +53,10 @@ class VoronoiGameMap:
         self.unit_id = 1  # Unique ID for each new point
         self.units = {0: {}, 1: {}, 2: {}, 3: {}}  # {player: {id: (x, y)}}
         self.occupancy_map = None  # Which cells belong to which player
+
+        # Plotting during debugging sessions
+        img_size = 800
+        self.renderer = VoronoiRender(map_size=map_size, scale_px=int(img_size/map_size), unit_px=int(5))
 
         self.reset_game()
 
@@ -113,18 +122,19 @@ class VoronoiGameMap:
             mask_grid_pos: Shape: [N, N]. If provided, only occupancy of these cells will be computed.
                 Used when updating occupancy map.
         """
-
         # Which cells contain units
         occ_map = self.get_unit_occupied_cells()
         occ_cell_pts = self.cell_origins[occ_map < 4]  # list of unit
         player_ids = occ_map[occ_map < 4]  # Shape: [N,]. player id for each occ cell
+        if player_ids.shape[0] < 1:
+            raise ValueError(f"No units on the map")
 
         # Create KD-tree with all occupied cells
         kdtree = scipy.spatial.KDTree(occ_cell_pts)
 
         # Query points: coords of each cell whose occupancy is not computed yet
         if mask_grid_pos is None:
-            mask = (occ_map > 4)
+            mask = (occ_map > 4)  # Not computed points
         else:
             mask = (occ_map > 4) & mask_grid_pos
             occ_map = self.occupancy_map  # Update existing map
@@ -135,8 +145,7 @@ class VoronoiGameMap:
         near_dist, near_idx = kdtree.query(candidate_cell_pts, k=2)
 
         # Resolve disputes for cells with more than 1 occupied cells at same distance
-        same_d = near_dist[:, 1] - near_dist[:, 0]
-        disputed = np.isclose(same_d, 0)
+        disputed = np.isclose(near_dist[:, 1] - near_dist[:, 0], 0)
         disputed_cell_pts = candidate_cell_pts[disputed]  # Shape: [N, 2].
         if disputed_cell_pts.shape[0] > 0:
             # Distance of nearest cell will be radius of our search
@@ -192,6 +201,10 @@ class VoronoiGameMap:
             start = self.spawn_loc[player]
             start = (int(start[0]), int(start[1]))  # Convert to cell index
 
+            if occ_map[start[1], start[0]] != player:
+                # Player's home base no longer belongs to player
+                continue
+
             h, w = occ_map.shape
             mask = np.zeros((h + 2, w + 2), np.uint8)
 
@@ -223,6 +236,40 @@ class VoronoiGameMap:
         # Update the occupancy map
         self.compute_occupancy_map(connectivity_map > 3)
         return killed_units
+
+    def load_units_from_file(self, path="tests/units.pkl"):
+        """Removes all units from the map. Used when adding custom unit placement, for live debugging"""
+        with open(path, 'rb') as handle:
+            units = pickle.load(handle)
+        self.units = units
+        self.logger.info(f"Loaded units from {path}")
+
+    def save_units_to_file(self, path='tests/units.pkl'):
+        """Saves the units pos to file, for live debugging"""
+        with open(path, 'wb') as handle:
+            pickle.dump(self.units, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        self.logger.info(f"Saved current units to {path}")
+
+    def load_units_from_history_file(self, path="tests/units_history.pkl", day=-1):
+        """Load units pos from a history file, for live debugging"""
+        with open(path, 'rb') as handle:
+            history = pickle.load(handle)
+        # access days in order
+        days = sorted(history.keys())
+        self.units = history[days[day]]
+        self.logger.info(f"Loaded units from day {day} in history at {path}")
+
+    def plot_occ_map(self):
+        """Draws a plot of the occupancy map, for live debugging"""
+        grid_rgb = self.renderer.get_colored_occ_map(self.occupancy_map, self.units)
+        plt.imshow(grid_rgb)
+        plt.show()
+
+    def plot_connectivity_map(self):
+        """Draws a plot of the occ map, for live debugging"""
+        grid_rgb = self.renderer.get_colored_occ_map(self.get_connectivity_map(), self.units)
+        plt.imshow(grid_rgb)
+        plt.show()
 
     def move_units(self, move_cmds: Dict[int, np.ndarray], max_dist: float = 1.0):
         """Move each unit with direction and distance and update map.
@@ -287,24 +334,28 @@ class VoronoiGameMap:
         self.remove_killed_units()
 
 
-if __name__ == '__main__':
-    import cv2
-    from matplotlib import pyplot as plt
-    mpl.use('TkAgg')  # For macOS. Change engine.
-
-    from voronoi_renderer import VoronoiRender
-
+def tests_plotting():
+    """Some tests that plot the game map"""
     game_map = VoronoiGameMap(map_size=10)
     renderer = VoronoiRender(map_size=10, scale_px=60, unit_px=5)
 
     # Viz grid
     # Add 2 units to the same cell
     game_map.add_units([(0, (5.7, 5.7)),
-                        (2, (5.3, 5.3))])
+                        (2, (5.3, 5.3)),
+                        (2, (9.7, 0.3))])
     # Add units that will result in multiple cells at same dist
     game_map.add_units([(0, (3.5, 0.5)),
                         (1, (5.5, 0.5)),
                         (0, (2.5, 0.5))])
+
+    # # testing edge condition
+    # game_map.units = {0: {}, 1:{}, 2:{}, 3:{}}
+    # game_map.add_units([(2, (9.5, 0.5)),
+    #                     (2, (7.5, 0.5)),
+    #                     (2, (5.5, 0.5)),
+    #                     (2, (9.5, 9.5)),
+    #                     (3, (8.5, 0.5))])
 
     # # Add 100 points per player randomly
     # import random
@@ -362,3 +413,16 @@ if __name__ == '__main__':
     ax1.set_title("Occupancy before move")
     ax2.set_title("Occupancy after move")
     plt.show()
+
+
+if __name__ == '__main__':
+    tests_plotting()
+
+    # Load history from a file
+    # game_map = VoronoiGameMap(map_size=100)
+    # renderer = VoronoiRender(map_size=100, scale_px=10, unit_px=20)
+    # game_map.load_units_from_history_file(day=-1)
+    # game_map.compute_occupancy_map()
+    # grid_rgb = renderer.get_colored_occ_map(game_map.occupancy_map, game_map.units)
+    # plt.imshow(grid_rgb)
+    # plt.show()

@@ -1,7 +1,6 @@
 from typing import Dict
 
 import numpy as np
-import scipy.spatial
 
 
 class Player:
@@ -38,19 +37,12 @@ class Player:
 
         # Move units - 0 deg = right, 90 deg = down
         units = np.array(unit_pos[self.player_idx])  # Shape: [N, 2]
+        if units.shape[0] < 1:
+            return []
         moves = np.ones_like(units)
         angle = 45 - (90 * self.player_idx)  # towards center
         angle = angle - (curr_day % 45) + (curr_day % 90 * 0.9)  # Spiral + noise
-        # angle = angle - (units[:, 0] - 50) * 0.1  # noise
-
         angle = angle + (units[:, 0] - 50) * 0.7  # noise
-
-
         moves[:, 1] = angle * np.pi / 180
-
-        # move towards nearest enemy unit
-        # units_enemy = [unit_pos[x] for x in range(4) if x != self.player_idx]
-        # units_enemy = np.concatenate(units_enemy, axis=0)  # [N, 2]
-        # kdtree = scipy.spatial.KDTree(units_enemy)
 
         return moves
