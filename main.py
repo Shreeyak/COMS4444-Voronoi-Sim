@@ -248,7 +248,7 @@ if __name__ == '__main__':
 
     game_window_height = 800
     map_size = args.map_size
-    total_days = 100  # args.days
+    total_days = 1000  # args.days
     fps = args.fps
     player_timeout = args.timeout
     spawn = args.spawn

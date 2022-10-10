@@ -137,13 +137,14 @@ class VoronoiEngine:
                 total_scores = self.score_total.tolist()
                 moves_ = player.play(unit_id, unit_pos, map_states, current_scores, total_scores)
                 # Convert sympy shit to floats
-                moves = np.array(moves_).astype(float)
+                moves_ = [(float(dist), float(angle)) for dist, angle in moves_]
+                moves = np.array(moves_)
                 # Nan angle:
                 nan_val = np.isnan(moves)
                 if np.any(nan_val):
                     nan_val = nan_val[:, 0] | nan_val[:, 1]
                     moves[nan_val] = 0
-                    self.logger.error(f"Player {player.player_idx} ({self.player_names[player.player_idx]}) on day "
+                    self.logger.warning(f"Player {player.player_idx} ({self.player_names[player.player_idx]}) on day "
                                       f"{self.curr_day} provided invalid move. Using 0 dist for that unit.")
 
             except TimeoutException:
