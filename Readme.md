@@ -52,6 +52,7 @@ In the simulator
 ```
 Key bindings:  
   - Esc: Quit the game.   
+  - P: Pause the game
   - R: Reset game
 ```
 
