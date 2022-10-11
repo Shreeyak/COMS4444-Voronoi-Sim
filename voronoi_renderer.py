@@ -56,7 +56,6 @@ class VoronoiRender:
         x, y = map(lambda z: round(z / self.scale_px, 2), [px, py])
         return x, y
 
-    # noinspection PyArgumentList
     def get_colored_occ_map(self,
                             occ_map: np.ndarray,
                             units: Optional[Dict[int, Dict]] = None,
