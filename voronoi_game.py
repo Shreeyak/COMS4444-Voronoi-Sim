@@ -131,7 +131,11 @@ class VoronoiEngine:
                 for idx in range(4):
                     unit_pos.append([shapely.geometry.Point(pos) for id, pos in self.units[idx].items()])
                     unit_id.append([id for id, pos in self.units[idx].items()])
-                map_states = (self.occupancy_map + 1).tolist()
+                # Convert occupancy map to list map_states. -1 is disputed, 1-4 is players.
+                map_state = (self.occupancy_map + 1)
+                map_state = map_state.astype(int)  # occ map is uint8, so cannot represent neg int
+                map_state[map_state == 5] = -1
+                map_states = map_state.T.tolist()
                 current_scores = self.score_curr.tolist()
                 total_scores = self.score_total.tolist()
                 moves_ = player.play(unit_id, unit_pos, map_states, current_scores, total_scores)
