@@ -255,21 +255,25 @@ if __name__ == '__main__':
     # logging.basicConfig(level=logging.DEBUG)
     logging.basicConfig(level=logging.INFO)
 
-    game_window_height = 800
+    game_window_height = 1400
     map_size = args.map_size
-    total_days = 1000  # args.days
+    total_days = args.last
     fps = args.fps
     player_timeout = args.timeout
     spawn = args.spawn
     seed = args.seed
-    if args.out_video:
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        save_video = f"videos/game-{now}.mp4"
-    else:
-        save_video = None
 
     player_name_list = [args.player1, args.player2, args.player3, args.player4]
     player_list = [(name, get_player(name)) for name in player_name_list]
+
+    if args.out_video:
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        player_str = ""
+        for p in player_name_list:
+            player_str += p
+        save_video = f"videos/{now}-game-p{player_str}.mp4"
+    else:
+        save_video = None
 
     if args.no_gui:
         voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=total_days, save_video=save_video,
