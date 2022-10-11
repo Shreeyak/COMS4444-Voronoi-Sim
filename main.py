@@ -227,7 +227,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='COMS 4444: Voronoi')
     parser.add_argument("--map_size", "-m", help="Size of the map in km", default=100, type=int)
     parser.add_argument("--no_gui", "-g", help="Disable GUI", action="store_true")
-    parser.add_argument("--days", "-d", help="Total number of days", default=10, type=int)
+    # parser.add_argument("--days", "-d", help="Total number of days", default=10, type=int)
+    parser.add_argument("--last", help="Total number of days", default=100, type=int)
     parser.add_argument("--spawn", default=5, type=int,
                         help="Number of days after which a new unit spawns at the homebase")
     parser.add_argument("--player1", "-p1", default="d", help="Specify player 1 out of 4. Integer equal to player id.")
