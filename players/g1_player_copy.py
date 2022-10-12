@@ -6,7 +6,7 @@ from turtle import distance
 import numpy as np
 import sympy
 import logging
-from typing import Tuple, Optional
+from typing import Tuple
 from collections import defaultdict
 
 import matplotlib as mpl
@@ -43,14 +43,13 @@ def delaunay2edges(tri_simplices):
 
 
 def poly_are_neighbors(poly1: shapely.geometry.polygon.Polygon,
-                       poly2: shapely.geometry.polygon.Polygon) -> Optional[shapely.geometry]:
-    """Return a line if polygons are neighbors. Polygons are neighbors iff they share an edge.
-    Only 1 vertex does not count."""
-    line = poly1.intersection(poly2)
-    if isinstance(line, shapely.geometry.linestring.LineString):
-        return line
+                       poly2: shapely.geometry.polygon.Polygon) -> bool:
+    # Polygons are neighbors iff they share an edge. Only 1 vertex does not count.
+    # Also, both polygons might be the same
+    if isinstance(poly1.intersection(poly2), shapely.geometry.linestring.LineString):
+        return True
     else:
-        return None
+        return False
 
 
 class Player:
@@ -120,7 +119,7 @@ class Player:
                 """
 
         map_size = 100
-        self.home_offset = 0.5
+        home_offset = 0.5
         _MAP_W = map_size
         spawn_loc = {
             0: (home_offset, home_offset),
@@ -134,10 +133,9 @@ class Player:
         #   When a cell is disputed, it no longer contributes to the voronoi diagram. All the units within that cell must
         #   be removed.
         units = self.create_units(unit_pos)
-        pt_player_dict = self.create_pts_player_dict(units, home_offset)
-
-        pts = list(pt_player_dict.keys())
-        player_ids = list(pt_player_dict.values())
+        pts_hash = self.create_pts_hash(units, home_offset)
+        pts = list(pts_hash.keys())
+        player_ids = list(pts_hash.values())
 
         # Get polygon of Voronoi regions around each pt
         vor_regions = self.create_voronoi_regions(pts, map_size)
@@ -181,34 +179,23 @@ class Player:
 
         return units
 
-    def create_pts_player_dict(self, units):
-        """Return all quantized non-disputed units and the player they correspond to. {pt: player}"""
+    def create_pts_hash(self, units, home_offset):
         pts_hash = {}
-        disputed_pts = []
+
         for pl, pos in units:
             # Quantize unit pos to cell. We assume cell origin at center.
-            pos_int = (int(pos[0]) + self.home_offset, int(pos[1]) + self.home_offset)
+            pos_int = (int(pos[0]) + home_offset, int(pos[1]) + home_offset)
 
             if pos_int in pts_hash:
                 player_existing = pts_hash[pos_int]
                 if player_existing == pl:
                     pts_hash[pos_int] = pl
                 else:
-                    # Disputed cell - remove later
-                    disputed_pts.append(pos_int)
+                    pass  # Disputed cell
             else:
                 pts_hash[pos_int] = pl
 
-        for pos_int in disputed_pts:
-            pts_hash.pop(pos_int)
         return pts_hash
-
-
-    def recreate_pl_units_dict(self, pts_hash):
-        units = {0: [], 1: [], 2: [], 3: []}
-        for pos, pl in pts_hash.items():
-            units[pl]
-
 
     def create_adj_dict(self, edges, pts):
         adj_dict = {}
