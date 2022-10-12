@@ -5,7 +5,7 @@ import atexit
 import datetime
 import logging
 
-import cv2
+import imageio_ffmpeg
 import numpy as np
 import pygame
 
@@ -14,7 +14,7 @@ from voronoi_game import VoronoiEngine
 
 
 class VoronoiInterface:
-    def __init__(self, player_list, total_days=100, map_size=100, player_timeout=120, game_window_height=800,
+    def __init__(self, player_list, total_days=100, map_size=100, player_timeout=120, game_window_height=720,
                  save_video=None, fps=60, spawn_freq=1, seed=0):
         """Interface for the Voronoi Game.
         Uses pygame to launch an interactive window
@@ -74,9 +74,11 @@ class VoronoiInterface:
             self.create_video = True
             self.video_path = save_video
             self.frame = np.empty((s_width, s_height, 3), dtype=np.uint8)
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # Codec. Alt: 'avc1'
-            self.writer = cv2.VideoWriter(save_video, apiPreference=0, fourcc=fourcc,
-                                          fps=fps, frameSize=(s_width, s_height))
+
+            # disable warning (due to frame size not being a multiple of 16)
+            self.writer = imageio_ffmpeg.write_frames(self.video_path, (s_width, s_height), ffmpeg_log_level="error",
+                                                      fps=16, quality=9)
+            self.writer.send(None)  # Seed the generator
 
         # Game data
         self.reset = False
@@ -137,9 +139,8 @@ class VoronoiInterface:
             if self.game_state.curr_day < self.total_days:
                 # Don't record past end of game
                 pygame.pixelcopy.surface_to_array(self.frame, self.screen)
-                frame = np.swapaxes(self.frame, 0, 1)
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-                self.writer.write(frame)
+                frame = np.ascontiguousarray(np.swapaxes(self.frame, 0, 1))
+                self.writer.send(frame)
 
     def draw_text(self):
         # Draw Info text on screen surface
@@ -173,7 +174,7 @@ class VoronoiInterface:
     def cleanup(self):
         # video - release and destroy windows
         if self.create_video and self.writer:
-            self.writer.release()
+            self.writer.close()
             self.writer = None
             logging.info(f" Saved video to: {self.video_path}")
         pygame.quit()
@@ -255,7 +256,7 @@ if __name__ == '__main__':
     # logging.basicConfig(level=logging.DEBUG)
     logging.basicConfig(level=logging.INFO)
 
-    game_window_height = 1400
+    game_window_height = 800
     map_size = args.map_size
     total_days = args.last
     fps = args.fps

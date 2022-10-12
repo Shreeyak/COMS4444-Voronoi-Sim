@@ -3,3 +3,4 @@ numpy==1.23.3
 pygame==2.1.2
 scikit-learn==1.1.2
 matplotlib==3.6.0
+imageio_ffmpeg==0.4.7
