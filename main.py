@@ -121,7 +121,12 @@ class VoronoiInterface:
                 self.info_end = ""
         else:
             self.info_end = "Game ended. Press R to reset, Esc to Quit"
-            self.running = False
+            if self.create_video and self.writer is not None:
+                self.writer.close()
+                self.writer = None
+                logging.info(f" Saved video to: {self.video_path}")
+
+            # self.running = False
 
     def render(self):
         self.screen.fill((255, 255, 255))  # Blank screen
@@ -173,7 +178,7 @@ class VoronoiInterface:
 
     def cleanup(self):
         # video - release and destroy windows
-        if self.create_video and self.writer:
+        if self.create_video and self.writer is not None:
             self.writer.close()
             self.writer = None
             logging.info(f" Saved video to: {self.video_path}")
