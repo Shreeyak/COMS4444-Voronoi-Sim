@@ -27,6 +27,7 @@ class VoronoiRender:
         self.player_back_colors = ['#fabed4', '#ffd8b1', '#aaffc3', '#42d4f4']
         player_colors = ['#e6194B', '#f58231', '#3cb44b', '#4363d8']
         self.player_colors = list(map(self._hex_to_rgb, player_colors))
+        self.player_back_colors_rgb = list(map(self._hex_to_rgb, self.player_back_colors))
 
     @staticmethod
     def _hex_to_rgb(col: str = "#ffffff"):
