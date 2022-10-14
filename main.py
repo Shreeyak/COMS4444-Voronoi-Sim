@@ -50,7 +50,7 @@ class VoronoiInterface:
 
         # pygame creates Surface objects on which it draws graphics. Surfaces can be layered on top of each other.
         # Window contains the map and a section to the right for text
-        text_w = int(game_window_height * 0.77)  # Width of text info box
+        text_w = int(game_window_height * 0.33333)  # Width of text info box
         s_width = self.renderer.img_w + text_w
         s_height = self.renderer.img_h
 
@@ -62,6 +62,7 @@ class VoronoiInterface:
                                                                 (text_w, self.renderer.img_h)))
         self.font = pygame.font.SysFont(None, 32)  # To create text
         self.info_end = ""  # Add text info
+        self.player_names = [x if "Group" in x else "Default" for x in self.game_state.player_names]
 
         # Game Map sub-surface
         self.occ_surf = self.screen.subsurface(pygame.Rect((0, 0), (self.renderer.img_w, self.renderer.img_h)))
@@ -70,6 +71,7 @@ class VoronoiInterface:
         self.fps = fps
 
         self.create_video = False
+        self.writer = None
         if save_video is not None:
             self.create_video = True
             self.video_path = save_video
@@ -100,7 +102,7 @@ class VoronoiInterface:
                     self.reset = True
                     logging.debug(f"Reset the map")
 
-                elif event.key == pygame.K_p:
+                elif event.key == pygame.K_p or event.key == pygame.K_SPACE:
                     # Reset map
                     self.pause = ~self.pause
                     logging.info(f"Game paused: {bool(self.pause)}")
@@ -117,8 +119,14 @@ class VoronoiInterface:
             if not self.pause:
                 self.game_state.progress_day()
                 self.info_end = ""
+            else:
+                self.info_end = "Game Paused"
         else:
-            self.info_end = "Game ended. Press R to reset, Esc to Quit"
+            self.info_end = "Game ended.\n Press R to reset\n Esc to Quit"
+            if self.writer is not None:
+                self.writer.close()
+                self.writer = None
+                print(f"Saved video to: {self.video_path}")
             self.running = False
 
     def render(self):
@@ -133,42 +141,63 @@ class VoronoiInterface:
         # Update the game window to see latest changes
         pygame.display.update()
 
-        if self.create_video and self.writer is not None and not self.pause:
-            if self.game_state.curr_day < self.total_days:
-                # Don't record past end of game
+        if self.writer is not None:
+            if self.game_state.curr_day < self.total_days and not self.pause:
+                # Don't record past end of game or if paused
                 pygame.pixelcopy.surface_to_array(self.frame, self.screen)
                 frame = np.swapaxes(self.frame, 0, 1)
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                 self.writer.write(frame)
 
     def draw_text(self):
-        # Draw Info text on screen surface
-        self.text_box_surf.fill((247, 233, 218))  # White background for text
-        box_rect = self.text_box_surf.get_rect()
-        color = (0, 0, 0)
-        pad_v = 0.1 * box_rect.height
-        pad_top = 0.25 * box_rect.height
-        pad_left = 0.2 * box_rect.width
+        """Draw Info text on screen surface"""
+        # Text box
+        self.text_box_surf.fill((243, 242, 234))  # Off-White background for text
+        text_color = (0, 0, 0)
+        text_box_rect = self.text_box_surf.get_rect()
+        pad_line = 0.1 * text_box_rect.height
+        pad_top = 0.25 * text_box_rect.height
+        pad_left = 0.2 * text_box_rect.width
 
         # Day count
         info_text = f"Day: {self.game_state.curr_day} / {self.total_days - 1}"
-        text_surf = self.font.render(info_text, True, color)
-        text_rect = text_surf.get_rect(midtop=box_rect.midtop)  # Position surface at center of text box
+        text_surf = self.font.render(info_text, True, text_color)
+        text_rect = text_surf.get_rect(midtop=text_box_rect.midtop)  # Position surface at center of text box
         text_rect.top += pad_top
         self.text_box_surf.blit(text_surf, text_rect.topleft)  # Draw text on text box
 
+        # Squares with player colors for easy identification
+        player_ind_size = (1.4 * text_rect.height, 1.3 * text_rect.height)  # Color box will be similar size as text
+        player_ind_rect = pygame.Rect((50, 60), player_ind_size)
+
         # Player Count + msg
-        info_text = f"Player 1 (G {self.game_state.player_names[0]}): {self.game_state.score_total[0]:,}\n" \
-                    f"Player 2 (G {self.game_state.player_names[1]}): {self.game_state.score_total[1]:,}\n" \
-                    f"Player 3 (G {self.game_state.player_names[2]}): {self.game_state.score_total[2]:,}\n" \
-                    f"Player 4 (G {self.game_state.player_names[3]}): {self.game_state.score_total[3]:,}\n"
-        info_text += self.info_end
-        text_lines = info_text.split("\n")
-        for idx, line in enumerate(text_lines):
-            text_surf = self.font.render(line, True, color)
-            text_rect = text_surf.get_rect(left=box_rect.left+pad_left, top=box_rect.top)  # Position surface at center of text box
-            text_rect.top += pad_top + (pad_v * (idx + 1))
+        total_score = self.game_state.score_total
+        for idx in range(4):
+            line = f"{self.player_names[idx]}: {total_score[idx]:,}"
+            text_surf = self.font.render(line, True, text_color)
+            # Position Text left-aligned and spaced out
+            text_rect = text_surf.get_rect(left=text_box_rect.left + pad_left, top=text_box_rect.top)
+            # text_rect.top += pad_top + (pad_line * (idx + 1))
+            line_spacing = text_rect.height * 2.5
+            text_rect.top += pad_top + ((idx + 1) * line_spacing)
             self.text_box_surf.blit(text_surf, text_rect.topleft)  # Draw text on text box
+
+            # Position Player Indicator Box
+            player_ind_rect.midleft = text_rect.midleft
+            player_ind_rect.left -= player_ind_rect.width * 1.3
+            color = self.renderer.player_back_colors_rgb[idx]
+            pygame.draw.rect(self.text_box_surf, color, player_ind_rect)
+            pygame.draw.rect(self.text_box_surf, (0, 0, 0), player_ind_rect, width=2)
+
+        # End Game text
+        init_pos = text_rect.bottom + pad_line  # Start from below player names
+        if self.info_end != "":
+            for idx, line in enumerate(self.info_end.split("\n")):
+                text_surf = self.font.render(line, True, text_color)
+                text_rect = text_surf.get_rect(midtop=text_box_rect.midtop)  # Position surface at center of text box
+                line_spacing = text_rect.height * 1.5
+                text_rect.top = init_pos + idx * line_spacing
+                self.text_box_surf.blit(text_surf, text_rect.topleft)  # Draw text on text box
 
     def cleanup(self):
         # video - release and destroy windows
