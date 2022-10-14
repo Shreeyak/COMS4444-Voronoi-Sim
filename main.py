@@ -60,9 +60,10 @@ class VoronoiInterface:
         # Text sub-surface
         self.text_box_surf = self.screen.subsurface(pygame.Rect((self.renderer.img_w, 0),
                                                                 (text_w, self.renderer.img_h)))
-        self.font = pygame.font.SysFont(None, 32)  # To create text
+        font_size = int(game_window_height / 800 * 32)  # 32 is a good size for size 800
+        self.font = pygame.font.SysFont(None, font_size)  # To create text
         self.info_end = ""  # Add text info
-        self.player_names = [x if "Group" in x else "Default" for x in self.game_state.player_names]
+        self.player_names = ["Default" if "d" in x else f"Group {x}" for x in self.game_state.player_names]
 
         # Game Map sub-surface
         self.occ_surf = self.screen.subsurface(pygame.Rect((0, 0), (self.renderer.img_w, self.renderer.img_h)))
@@ -70,10 +71,8 @@ class VoronoiInterface:
         self.clock = pygame.time.Clock()
         self.fps = fps
 
-        self.create_video = False
         self.writer = None
         if save_video is not None:
-            self.create_video = True
             self.video_path = save_video
             self.frame = np.empty((s_width, s_height, 3), dtype=np.uint8)
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # Codec. Alt: 'avc1'
@@ -127,7 +126,7 @@ class VoronoiInterface:
                 self.writer.close()
                 self.writer = None
                 print(f"Saved video to: {self.video_path}")
-            self.running = False
+            # self.running = False
 
     def render(self):
         self.screen.fill((255, 255, 255))  # Blank screen
@@ -172,14 +171,14 @@ class VoronoiInterface:
 
         # Player Count + msg
         total_score = self.game_state.score_total
+        pad_line = text_rect.height * 2.5
         for idx in range(4):
             line = f"{self.player_names[idx]}: {total_score[idx]:,}"
             text_surf = self.font.render(line, True, text_color)
             # Position Text left-aligned and spaced out
             text_rect = text_surf.get_rect(left=text_box_rect.left + pad_left, top=text_box_rect.top)
             # text_rect.top += pad_top + (pad_line * (idx + 1))
-            line_spacing = text_rect.height * 2.5
-            text_rect.top += pad_top + ((idx + 1) * line_spacing)
+            text_rect.top += pad_top + ((idx + 1) * pad_line)
             self.text_box_surf.blit(text_surf, text_rect.topleft)  # Draw text on text box
 
             # Position Player Indicator Box
@@ -190,6 +189,7 @@ class VoronoiInterface:
             pygame.draw.rect(self.text_box_surf, (0, 0, 0), player_ind_rect, width=2)
 
         # End Game text
+        pad_line = text_rect.height * 4
         init_pos = text_rect.bottom + pad_line  # Start from below player names
         if self.info_end != "":
             for idx, line in enumerate(self.info_end.split("\n")):
@@ -201,7 +201,7 @@ class VoronoiInterface:
 
     def cleanup(self):
         # video - release and destroy windows
-        if self.create_video and self.writer:
+        if self.writer is not None:
             self.writer.release()
             self.writer = None
             logging.info(f" Saved video to: {self.video_path}")
@@ -284,7 +284,7 @@ if __name__ == '__main__':
     # logging.basicConfig(level=logging.DEBUG)
     logging.basicConfig(level=logging.INFO)
 
-    game_window_height = 1400
+    game_window_height = 800
     map_size = args.map_size
     total_days = args.last
     fps = args.fps
