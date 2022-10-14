@@ -64,6 +64,8 @@ Project was created with Python 3.9. Install dependencies with:
 pip install -r requirements.txt
 ```
 
+Saving videos also needs ffmpeg installed on the system.
+
 ### Coordinate System
 
 We use an X-right, Y-down coordinate system. (same as original sim) 
