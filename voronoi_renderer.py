@@ -26,6 +26,7 @@ class VoronoiRender:
         # Colors from: https://sashamaps.net/docs/resources/20-colors/
         self.player_back_colors = ['#fabed4', '#ffd8b1', '#aaffc3', '#42d4f4']
         player_colors = ['#e6194B', '#f58231', '#3cb44b', '#4363d8']
+        # [(230, 25, 75), (245, 130, 49), (60, 180, 75), (67, 99, 216)]
         self.player_colors = list(map(self._hex_to_rgb, player_colors))
         self.player_back_colors_rgb = list(map(self._hex_to_rgb, self.player_back_colors))
 
