@@ -9,6 +9,7 @@ import shapely.geometry
 import shapely.ops
 import scipy
 
+from tests.test_voronoi_order import plot_units_and_edges
 
 warnings.filterwarnings("ignore", category=shapely.errors.ShapelyDeprecationWarning)
 
@@ -128,6 +129,8 @@ class Player:
         # Clean edges
         edges, edge_player_id = self.clean_edges(edges, discrete_players, discrete_pts, pt_to_poly, vor_regions,
                                                  poly_idx_to_player)
+
+        # plot_units_and_edges(edges, edge_player_id, discrete_pts, discrete_players, self.current_day)
 
         # Create adjacency list for graph of armies
         adj_dict = self.create_adj_dict(edges, discrete_pts)
