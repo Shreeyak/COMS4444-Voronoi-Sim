@@ -14,36 +14,224 @@ from tests.plot_funcs import plot_units_and_edges
 warnings.filterwarnings("ignore", category=shapely.errors.ShapelyDeprecationWarning)
 
 
-def delaunay2edges(tri_simplices) -> np.ndarray:
-    """Convert the delaunay tris to unique edges
-    Args:
-        tri_simplices: Triangles. The .simplices param of the triangulation object from scipy.
-    Ref:
-        https://stackoverflow.com/questions/69512972/how-to-generate-edge-index-after-delaunay-triangulation
-    """
+class CreateGraph:
+    def __init__(self, home_offset):
+        self.home_offset = home_offset
 
-    def less_first(a, b):
-        return (a, b) if a < b else (b, a)
+    def create_pts_player_dict(self, units) -> tuple[dict[tuple, int], dict[int, list[tuple]]]:
+        """Return all quantized non-disputed units and the player they correspond to.
 
-    edges_dict = defaultdict(list)  # Gives all the edges and the associated triangles
-    for idx, triangle in enumerate(tri_simplices):
-        for e1, e2 in [[0, 1], [1, 2], [2, 0]]:  # for all edges of triangle
-            edge = less_first(triangle[e1], triangle[e2])  # always lesser index first
-            edges_dict[edge].append(idx)  # prevent duplicates. Track associated simplexes for each edge.
+        Returns:
+            dict: Pt to player map {pt: player}
+            dict: Player to all points map
+        """
+        # TODO: Use occ map to remove disputed points, and get player for each remaining point
+        pts_hash = {}
+        disputed_pts = []
+        all_points = defaultdict(lambda: [])
+        for pl in range(4):
+            for spt in units[pl]:
+                # Add point to all units list regardless
+                x, y = spt.coords[0]
+                all_points[pl].append((x, y))
 
-    array_of_edges = np.array(list(edges_dict.keys()), dtype=int)
-    return array_of_edges
+                # Quantize unit pos to cell. We assume cell origin at center.
+                pos_int = (int(x) + self.home_offset, int(y) + self.home_offset)
+
+                if pos_int in pts_hash:
+                    player_existing = pts_hash[pos_int]
+                    if player_existing != pl:
+                        # Disputed cell - remove later
+                        disputed_pts.append(pos_int)
+                else:
+                    pts_hash[pos_int] = pl
+
+        for pos_int in disputed_pts:
+            if pos_int in pts_hash:
+                pts_hash.pop(pos_int)
+
+        return pts_hash, all_points
+
+    @staticmethod
+    def create_pt_to_poly_and_idx(kdtree, discrete_pts, vor_regions):
+        # kdtree contains all the discrete points
+        # Find mapping from pts idx to polys (via nearest unit) and poly to player
+        pt_to_poly_idx = {}  # Polygon isn't hashable, so we use polygon idx.
+        pt_to_poly = {}
+
+        for region_idx, region in enumerate(vor_regions):
+            # Voronoi regions are all convex. Nearest pt to centroid must be point belonging to region
+            centroid = region.centroid.coords[0]
+            _, ii = kdtree.query(centroid, k=1)  # index of nearest pt
+            # repr_pt = region.representative_point()
+            # _, ii = self.kdtree.query(repr_pt, k=1)  # index of nearest pt
+
+            pt_to_poly_idx[discrete_pts[ii]] = region_idx
+            pt_to_poly[discrete_pts[ii]] = region
+
+        return pt_to_poly_idx, pt_to_poly
+
+    @staticmethod
+    def delaunay2edges(tri_simplices) -> np.ndarray:
+        """Convert the delaunay tris to unique edges
+        Args:
+            tri_simplices: Triangles. The .simplices param of the triangulation object from scipy.
+        Ref:
+            https://stackoverflow.com/questions/69512972/how-to-generate-edge-index-after-delaunay-triangulation
+        """
+
+        def less_first(a, b):
+            return (a, b) if a < b else (b, a)
+
+        edges_dict = defaultdict(list)  # Gives all the edges and the associated triangles
+        for idx, triangle in enumerate(tri_simplices):
+            for e1, e2 in [[0, 1], [1, 2], [2, 0]]:  # for all edges of triangle
+                edge = less_first(triangle[e1], triangle[e2])  # always lesser index first
+                edges_dict[edge].append(idx)  # prevent duplicates. Track associated simplexes for each edge.
+
+        array_of_edges = np.array(list(edges_dict.keys()), dtype=int)
+        return array_of_edges
+
+    @staticmethod
+    def poly_are_neighbors(poly1: shapely.geometry.polygon.Polygon,
+                           poly2: shapely.geometry.polygon.Polygon) -> Optional[shapely.geometry.LineString]:
+        """Return a line if polygons are neighbors. Polygons are neighbors iff they share an edge.
+        Only 1 vertex does not count."""
+        line = poly1.intersection(poly2)
+        if isinstance(line, shapely.geometry.linestring.LineString):
+            return line
+        else:
+            return None
+
+    @staticmethod
+    def create_adj_dict(edges, pts):
+        adj_dict = defaultdict(lambda: [])
+        for val in edges:
+            p1 = pts[val[0]]
+            p2 = pts[val[1]]
+            # Adjacency = bi-directional graph
+            adj_dict[p1].append(p2)
+            adj_dict[p2].append(p1)
+
+        return adj_dict
+
+    @staticmethod
+    def create_voronoi_regions(pts: list[tuple], map_size: int):
+        """Get polygon of Voronoi regions around each pt. Bound polygons to map.
+
+        Args:
+            pts: all units
+            map_size: Size of map
+
+        Returns:
+            list: List of polygons (not in same order as input points)
+            list: List of ints. 1 if corresponding poly was corrected (was out of bounds), 0 otherwise
+        """
+        #
+        _points = shapely.geometry.MultiPoint(pts)
+        envelope = shapely.geometry.box(0, 0, map_size, map_size)
+        vor_regions_ = shapely.ops.voronoi_diagram(_points, envelope=envelope)
+        vor_regions_ = list(vor_regions_)  # Convert to a list of Polygon
+
+        # The polys aren't bounded. Fix manually.
+        vor_regions = []
+        region_was_unbounded = []  # Whether a region was out of bounds
+        for region in vor_regions_:
+            # if not isinstance(region, shapely.geometry.Polygon):
+            #     print(f"WARNING: Region returned from voronoi not a polygon: {type(region)}")
+
+            region_bounded = region.intersection(envelope)
+            vor_regions.append(region_bounded)
+
+            if region_bounded.area != region.area:
+                region_was_unbounded.append(1)
+            else:
+                region_was_unbounded.append(0)
+
+            if region_bounded.area <= 0:
+                raise RuntimeError(f"Unexpected: Polygon is completely outside map")
+
+        return vor_regions, region_was_unbounded
+
+    def clean_edges(self, edges: np.ndarray, discrete_pts: list, discrete_players: list, pt_to_poly: dict,
+                    region_was_unbounded, pt_to_poly_idx):
+        """Deletes invalid edges (polygons are not neighbors)
+
+        Returns:
+            list: List of valid edges
+            list: List of player each edge belongs to. If edge connects enemies, then value is 4.
+        """
+        edge_player_id = []  # Player each edge belongs to
+        edges_cleaned = []
+        for idx, (p1_idx, p2_idx) in enumerate(edges):
+            # TODO: Optimize this: We need to check if polygons are actually neighbors, because
+            #  the scipy delaunay does not take into account the bounded polygons. Polys that
+            #  meet at infinity will also count. Soln: Mirror all the points, so the bounds of the
+            #  map will form natuarally, then delete the extra points and edges after.
+
+            # test - We only do neighbor check on polygons that were modified. Faster.
+            # Side-effect: Allows polys that may only share a corner to be classified as neighbors
+            # Without this if, code is slower, but only true neighbors are filtered through.
+            if (
+                region_was_unbounded[pt_to_poly_idx[discrete_pts[p1_idx]]] == 1 or
+                region_was_unbounded[pt_to_poly_idx[discrete_pts[p2_idx]]] == 1
+            ):
+                poly1 = pt_to_poly[discrete_pts[p1_idx]]
+                poly2 = pt_to_poly[discrete_pts[p2_idx]]
+                are_neighbors = self.poly_are_neighbors(poly1, poly2)
+                if are_neighbors is None:
+                    continue
+
+            edges_cleaned.append((p1_idx, p2_idx))
+
+            # Identify player edge belongs to
+            player1 = discrete_players[p1_idx]  # Edges (from scipy) refer to points by their indices
+            player2 = discrete_players[p2_idx]
+            if player1 == player2:
+                edge_player_id.append(player1)
+            else:
+                edge_player_id.append(4)
+
+        return edges_cleaned, edge_player_id
 
 
-def poly_are_neighbors(poly1: shapely.geometry.polygon.Polygon,
-                       poly2: shapely.geometry.polygon.Polygon) -> Optional[shapely.geometry.LineString]:
-    """Return a line if polygons are neighbors. Polygons are neighbors iff they share an edge.
-    Only 1 vertex does not count."""
-    line = poly1.intersection(poly2)
-    if isinstance(line, shapely.geometry.linestring.LineString):
-        return line
-    else:
-        return None
+    # def create_superpolygon(self, vor_regions, pt_to_poly, adj_dict):
+        #     friendly_polygons = []
+        #     for idx, reg in enumerate(vor_regions):
+        #         if pt_to_poly[idx] == self.player_idx:
+        #             friendly_polygons.append(reg)
+        #
+        #     superpolygon = shapely.ops.unary_union(friendly_polygons)
+        #
+        #     s_neighbors = set()
+        #     for unit in adj_dict:
+        #         if superpolygon.contains(shapely.geometry.Point(unit[0], unit[1])):
+        #             for neigh in adj_dict[unit]:
+        #                 if not superpolygon.contains(shapely.geometry.Point(neigh[0], neigh[1])):
+        #                     s_neighbors.add(neigh)
+        #     s_neighbors = list(s_neighbors)
+        #
+        #     return superpolygon, s_neighbors
+
+        # def find_target_from_superpolygon(self, unit, superpolygon, s_neighbors, friendly_units, pt_to_poly_idx, vor_regions):
+        #     neighboring_enemies = [n for n in s_neighbors if n not in friendly_units]
+        #     neighboring_enemy_polygons = [pt_to_poly_idx[ne] for ne in neighboring_enemies]
+        #
+        #     candidates = set()
+        #     for poly_idx in neighboring_enemy_polygons:
+        #         polygon = vor_regions[poly_idx]
+        #         intersection = superpolygon.intersection(polygon)
+        #         if isinstance(intersection, shapely.geometry.LineString):
+        #             points = intersection.coords
+        #             for point in list(points):
+        #                 candidates.add(point)
+        #
+        #     if len(candidates) == 0:
+        #         target = unit  # if no enemies are found, stay in the same place
+        #     else:
+        #         target = max(list(candidates), key=lambda pt: (pt[0] - unit[0]) ** 2 + (pt[1] - unit[1]) ** 2)
+        #
+        #     return target
 
 
 class Player:
@@ -115,9 +303,11 @@ class Player:
             3: (self.home_offset, _MAP_W - self.home_offset)
         }
 
+        cg = CreateGraph(self.home_offset)
+
         # Construct 2 lists: triangulation/voronoi takes discrete, strategy takes continuous position
         # Note: Discretized points will have duplicates, which are removed (disputed points, both removed).
-        discrete_pt2player, all_points = self.create_pts_player_dict(unit_pos)
+        discrete_pt2player, all_points = cg.create_pts_player_dict(unit_pos)
         if len(all_points[self.player_idx]) == 0:
             return []  # No units on the map
 
@@ -125,25 +315,25 @@ class Player:
         discrete_players = list(discrete_pt2player.values())
 
         # Get polygon of Voronoi regions around each pt
-        vor_regions, region_was_unbounded = self.create_voronoi_regions(discrete_pts, map_size)
+        vor_regions, region_was_unbounded = cg.create_voronoi_regions(discrete_pts, map_size)
 
         # Find mapping from pts idx to polys (via nearest unit) and poly to player
         self.kdtree = scipy.spatial.KDTree(discrete_pts)
-        pt_to_poly_idx, pt_to_poly = self.create_pt_to_poly_and_idx(discrete_pts, vor_regions)
+        pt_to_poly_idx, pt_to_poly = cg.create_pt_to_poly_and_idx(self.kdtree, discrete_pts, vor_regions)
 
         # Get the graph of connected pts via triangulation
         tri = scipy.spatial.Delaunay(np.array(discrete_pts))
-        edges = delaunay2edges(tri.simplices)  # Shape: [N, 2]
+        edges = cg.delaunay2edges(tri.simplices)  # Shape: [N, 2]
         # Clean edges
-        edges, edge_player_id = self.clean_edges(edges, discrete_pts, discrete_players, pt_to_poly,
-                                                 region_was_unbounded, pt_to_poly_idx)
+        edges, edge_player_id = cg.clean_edges(edges, discrete_pts, discrete_players, pt_to_poly,
+                                               region_was_unbounded, pt_to_poly_idx)
 
         if self.current_day > 1000:
             plot_units_and_edges(edges, edge_player_id, discrete_pts, discrete_players, pt_to_poly,
                                  self.current_day)
 
         # Create adjacency list for graph of armies
-        adj_dict = self.create_adj_dict(edges, discrete_pts)
+        adj_dict = cg.create_adj_dict(edges, discrete_pts)
 
         moves = self.play_aggressive(all_points, pt_to_poly, adj_dict)
         # if self.current_day <= (50 - self.spawn_days) or total_scores[self.player_idx] < max(total_scores):
@@ -158,187 +348,8 @@ class Player:
         self.current_day += 1
         return moves
 
-    def create_pts_player_dict(self, units) -> tuple[dict[tuple, int], dict[int, list[tuple]]]:
-        """Return all quantized non-disputed units and the player they correspond to.
-
-        Returns:
-            dict: Pt to player map {pt: player}
-            dict: Player to all points map
-        """
-        # TODO: Use occ map to remove disputed points, and get player for each remaining point
-        pts_hash = {}
-        disputed_pts = []
-        all_points = defaultdict(lambda: [])
-        for pl in range(4):
-            for spt in units[pl]:
-                # Add point to all units list regardless
-                x, y = spt.coords[0]
-                all_points[pl].append((x, y))
-
-                # Quantize unit pos to cell. We assume cell origin at center.
-                pos_int = (int(x) + self.home_offset, int(y) + self.home_offset)
-
-                if pos_int in pts_hash:
-                    player_existing = pts_hash[pos_int]
-                    if player_existing != pl:
-                        # Disputed cell - remove later
-                        disputed_pts.append(pos_int)
-                else:
-                    pts_hash[pos_int] = pl
-
-        for pos_int in disputed_pts:
-            if pos_int in pts_hash:
-                pts_hash.pop(pos_int)
-
-        return pts_hash, all_points
-
-    def create_adj_dict(self, edges, pts):
-        adj_dict = defaultdict(lambda: [])
-        for val in edges:
-            p1 = pts[val[0]]
-            p2 = pts[val[1]]
-            # Adjacency = bi-directional graph
-            adj_dict[p1].append(p2)
-            adj_dict[p2].append(p1)
-
-        return adj_dict
-
-    def create_voronoi_regions(self, pts: list[tuple], map_size: int):
-        """Get polygon of Voronoi regions around each pt. Bound polygons to map.
-        
-        Args:
-            pts: all units
-            map_size: Size of map
-
-        Returns:
-            list: List of polygons (not in same order as input points)
-            list: List of ints. 1 if corresponding poly was corrected (was out of bounds), 0 otherwise
-        """
-        # 
-        _points = shapely.geometry.MultiPoint(pts)
-        envelope = shapely.geometry.box(0, 0, map_size, map_size)
-        vor_regions_ = shapely.ops.voronoi_diagram(_points, envelope=envelope)
-        vor_regions_ = list(vor_regions_)  # Convert to a list of Polygon
-
-        # The polys aren't bounded. Fix manually.
-        # TODO: Shortlist poly candidates by seeing which ones have coords outside bounds.
-        vor_regions = []
-        region_was_unbounded = []  # Whether a region was out of bounds
-        for region in vor_regions_:
-            # if not isinstance(region, shapely.geometry.Polygon):
-            #     print(f"WARNING: Region returned from voronoi not a polygon: {type(region)}")
-
-            region_bounded = region.intersection(envelope)
-            vor_regions.append(region_bounded)
-            
-            if region_bounded.area != region.area:
-                region_was_unbounded.append(1)
-            else:
-                region_was_unbounded.append(0)
-
-            if region_bounded.area <= 0:
-                raise RuntimeError(f"Unexpected: Polygon is completely outside map")
-
-        return vor_regions, region_was_unbounded
-
-    def create_pt_to_poly_and_idx(self, discrete_pts, vor_regions):
-        # Find mapping from pts idx to polys (via nearest unit) and poly to player
-        pt_to_poly_idx = {}  # Polygon isn't hashable, so we use polygon idx.
-        pt_to_poly = {}
-
-        for region_idx, region in enumerate(vor_regions):
-            # Voronoi regions are all convex. Nearest pt to centroid must be point belonging to region
-            centroid = region.centroid.coords[0]
-            _, ii = self.kdtree.query(centroid, k=1)  # index of nearest pt
-            # repr_pt = region.representative_point()
-            # _, ii = self.kdtree.query(repr_pt, k=1)  # index of nearest pt
-
-            pt_to_poly_idx[discrete_pts[ii]] = region_idx
-            pt_to_poly[discrete_pts[ii]] = region
-
-        return pt_to_poly_idx, pt_to_poly
-
-    def clean_edges(self, edges: np.ndarray, discrete_pts: list, discrete_players: list, pt_to_poly: dict,
-                    region_was_unbounded, pt_to_poly_idx):
-        """Deletes invalid edges (polygons are not neighbors)
-        
-        Returns:
-            list: List of valid edges
-            list: List of player each edge belongs to. If edge connects enemies, then value is 4.
-        """
-        edge_player_id = []  # Player each edge belongs to
-        edges_cleaned = []
-        for idx, (p1_idx, p2_idx) in enumerate(edges):
-            # TODO: Optimize this: We need to check if polygons are actually neighbors, because
-            #  the scipy delaunay does not take into account the bounded polygons. Polys that
-            #  meet at infinity will also count. Soln: Mirror all the points, so the bounds of the
-            #  map will form natuarally, then delete the extra points and edges after.
-
-            # test - We only do neighbor check on polygons that were modified. Faster.
-            # Side-effect: Allows polys that may only share a corner to be classified as neighbors
-            # Without this if, code is slower, but only true neighbors are filtered through.
-            if (
-                region_was_unbounded[pt_to_poly_idx[discrete_pts[p1_idx]]] == 1 or
-                region_was_unbounded[pt_to_poly_idx[discrete_pts[p2_idx]]] == 1
-            ):
-                poly1 = pt_to_poly[discrete_pts[p1_idx]]
-                poly2 = pt_to_poly[discrete_pts[p2_idx]]
-                are_neighbors = poly_are_neighbors(poly1, poly2)
-                if are_neighbors is None:
-                    continue
-
-            edges_cleaned.append((p1_idx, p2_idx))
-
-            # Identify player edge belongs to
-            player1 = discrete_players[p1_idx]  # Edges (from scipy) refer to points by their indices
-            player2 = discrete_players[p2_idx]
-            if player1 == player2:
-                edge_player_id.append(player1)
-            else:
-                edge_player_id.append(4)
-
-        return edges_cleaned, edge_player_id
-
-    # def create_superpolygon(self, vor_regions, pt_to_poly, adj_dict):
-    #     friendly_polygons = []
-    #     for idx, reg in enumerate(vor_regions):
-    #         if pt_to_poly[idx] == self.player_idx:
-    #             friendly_polygons.append(reg)
-    # 
-    #     superpolygon = shapely.ops.unary_union(friendly_polygons)
-    # 
-    #     s_neighbors = set()
-    #     for unit in adj_dict:
-    #         if superpolygon.contains(shapely.geometry.Point(unit[0], unit[1])):
-    #             for neigh in adj_dict[unit]:
-    #                 if not superpolygon.contains(shapely.geometry.Point(neigh[0], neigh[1])):
-    #                     s_neighbors.add(neigh)
-    #     s_neighbors = list(s_neighbors)
-    # 
-    #     return superpolygon, s_neighbors
-
-    def find_target_from_superpolygon(self, unit, superpolygon, s_neighbors, friendly_units, pt_to_poly_idx, vor_regions):
-        neighboring_enemies = [n for n in s_neighbors if n not in friendly_units]
-        neighboring_enemy_polygons = [pt_to_poly_idx[ne] for ne in neighboring_enemies]
-
-        candidates = set()
-        for poly_idx in neighboring_enemy_polygons:
-            polygon = vor_regions[poly_idx]
-            intersection = superpolygon.intersection(polygon)
-            if isinstance(intersection, shapely.geometry.LineString):
-                points = intersection.coords
-                for point in list(points):
-                    candidates.add(point)
-
-        if len(candidates) == 0:
-            target = unit  # if no enemies are found, stay in the same place
-        else:
-            target = max(list(candidates), key=lambda pt: (pt[0] - unit[0]) ** 2 + (pt[1] - unit[1]) ** 2)
-
-        return target
-
-    def move_toward_position(self, current, target):
-        # TODO: what if we always pass a distance of 1?
+    @staticmethod
+    def move_toward_position(current, target):
         distance_to_target = np.sqrt((target[0] - current[0]) ** 2 + (target[1] - current[1]) ** 2)
 
         if distance_to_target == 0:
