@@ -115,7 +115,7 @@ class VoronoiEngine:
 
         # move units - accept inputs from each player
         move_cmds = {}
-        for player in self.players:
+        for pl_idx, (player, pl_name) in enumerate(zip(self.players, self.player_names)):
             try:
                 # Timeout
                 signal.signal(signal.SIGALRM, timeout_handler)
@@ -141,12 +141,12 @@ class VoronoiEngine:
                 moves_ = player.play(unit_id, unit_pos, map_states, current_scores, total_scores)
 
                 # Check return values are correct
-                if len(moves_) != len(unit_pos[player.player_idx]):
-                    self.logger.warning(f"Player {player.player_idx} ({self.player_names[player.player_idx]}) "
+                if len(moves_) != len(unit_pos[pl_idx]):
+                    self.logger.warning(f"Player ({pl_name}) "
                                         f"provided invalid moves: Length of moves ({len(moves_)}) "
-                                        f"must be same as num of units ({len(unit_pos[player.player_idx])}). "
+                                        f"must be same as num of units ({len(unit_pos[pl_idx])}). "
                                         f"Using 0 dist for all units.")
-                    moves = np.zeros((len(self.game_map.units[player.player_idx]), 2), dtype=float)
+                    moves = np.zeros((len(self.game_map.units[pl_idx]), 2), dtype=float)
                 else:
                     moves = np.array(moves_).astype(float)
                     # Nan angle:
@@ -154,26 +154,26 @@ class VoronoiEngine:
                     if np.any(nan_val):
                         nan_val = nan_val[:, 0] | nan_val[:, 1]
                         moves[nan_val] = 0
-                        self.logger.warning(f"Player {player.player_idx} ({self.player_names[player.player_idx]}) on day "
+                        self.logger.warning(f"Player ({pl_name}) on day "
                                           f"{self.curr_day} provided invalid move. Using 0 dist for that unit.")
 
             except TimeoutException:
-                self.logger.error(f" Timeout - Player {player.player_idx} ({self.player_names[player.player_idx]}) "
+                self.logger.error(f" Timeout - Player ({pl_name}) "
                                   f"on day {self.curr_day} - play took longer than {self.player_timeout}s\n"
                                   f"NULL moves for this turn.")
-                moves = np.zeros((len(self.game_map.units[player.player_idx]), 2), dtype=float)
+                moves = np.zeros((len(self.game_map.units[pl_idx]), 2), dtype=float)
 
             except Exception as e:
                 self.logger.error(
-                    f" Exception raised by Player {player.player_idx} ({self.player_names[player.player_idx]}) "
+                    f" Exception raised by Player ({pl_name}) "
                     f"on day {self.curr_day}. NULL moves for this turn.\n"
                     f"  Error Message: {e}\n"
                     f"{traceback.format_exc()}")
-                moves = np.zeros((len(self.game_map.units[player.player_idx]), 2), dtype=float)
+                moves = np.zeros((len(self.game_map.units[pl_idx]), 2), dtype=float)
 
             signal.alarm(0)  # Clear timeout alarm
 
-            move_cmds[player.player_idx] = moves
+            move_cmds[pl_idx] = moves
 
         self.game_map.move_units(move_cmds)
         self.game_map.update()

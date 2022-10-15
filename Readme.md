@@ -1,5 +1,12 @@
 # Voronoi Pygame Sim
 
+![fast](images/demo-sim.gif)
+
+This is an optimized recreation of the simulator for the Voronoi Game for COMS 4444 class at Columbia.  
+Voronoi Game: 100x100km grid, each cell is 1x1km. Each cell is controlled by the unit closest to that cell. 
+Each player spawns one unit every N days. Every unit can move 1km per day. If a unit is isolated from it's 
+home base, it gets killed. The controlled area is added to the total score at the end of each day.
+
 Much faster simulator for the voronoi game. Primary features:
 - Speed: 1000 days in ~36 sec (default player)
 - Identical player interface: Just replace `players/<gr>_player.py` file with the file from official sim's 
@@ -8,9 +15,10 @@ Much faster simulator for the voronoi game. Primary features:
   with visuals.
 - Video export: Export a video of the game, if needed. Just add a `--video` flag.
 
-The simulator uses pygame for the visualization. It also has a few under-the-hood optimizations to make it run faster.
+The simulator uses pygame for the visualization. It also has a few under-the-hood optimizations to make it run
+faster.
 
-![fast](images/demo-sim.gif)
+Each of the player's code is copied from the original repo for testing. Credits due to the respective authors.
 
 ### Launch:
 
