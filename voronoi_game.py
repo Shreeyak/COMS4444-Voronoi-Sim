@@ -28,7 +28,7 @@ def timeout_handler(signum, frame):   # Custom signal handler
 
 class VoronoiEngine:
     def __init__(self, player_list, map_size=100, total_days=100, save_video=None, log=True, spawn_freq=1,
-                 player_timeout=120, seed=0):
+                 player_timeout=120, seed=0, ignore_error=False):
         self.game_map = VoronoiGameMap(map_size=map_size, log=log)
         self.renderer = VoronoiRender(map_size=map_size, scale_px=10, unit_px=5)
         self.logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class VoronoiEngine:
 
         self.spawn_freq = spawn_freq
         self.player_timeout = player_timeout
+        self.ignore_error = ignore_error
         self.total_days = total_days
         self.curr_day = -1
         self.score_total = np.zeros((4,), dtype=int)
@@ -169,7 +170,10 @@ class VoronoiEngine:
                     f"on day {self.curr_day}. NULL moves for this turn.\n"
                     f"  Error Message: {e}\n"
                     f"{traceback.format_exc()}")
-                moves = np.zeros((len(self.game_map.units[pl_idx]), 2), dtype=float)
+                if self.ignore_error:
+                    moves = np.zeros((len(self.game_map.units[pl_idx]), 2), dtype=float)
+                else:
+                    raise e
 
             signal.alarm(0)  # Clear timeout alarm
 

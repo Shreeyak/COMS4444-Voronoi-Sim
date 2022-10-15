@@ -15,7 +15,7 @@ from voronoi_game import VoronoiEngine
 
 class VoronoiInterface:
     def __init__(self, player_list, total_days=100, map_size=100, player_timeout=120, game_window_height=720,
-                 save_video=None, fps=60, spawn_freq=1, seed=0):
+                 save_video=None, fps=60, spawn_freq=1, seed=0, ignore_error=False, exit_end=False):
         """Interface for the Voronoi Game.
         Uses pygame to launch an interactive window
 
@@ -34,13 +34,14 @@ class VoronoiInterface:
         """
         atexit.register(self.cleanup)  # Calls destructor
 
+        self.exit_end = exit_end
         self.spawn_freq = spawn_freq
         self.map_size = map_size
         scale_px = game_window_height // map_size
         self.total_days = total_days
         self.game_state = VoronoiEngine(player_list, map_size=map_size, total_days=total_days,
                                         save_video=None, spawn_freq=spawn_freq, player_timeout=player_timeout,
-                                        seed=seed)
+                                        seed=seed, ignore_error=ignore_error)
         self.renderer = VoronoiRender(map_size=map_size, scale_px=scale_px, unit_px=int(scale_px / 2))
 
         pygame.init()
@@ -128,7 +129,8 @@ class VoronoiInterface:
                 self.writer.close()
                 self.writer = None
                 print(f"Saved video to: {self.video_path}")
-            # self.running = False
+            if self.exit_end:
+                self.running = False
 
     def render(self):
         self.screen.fill((255, 255, 255))  # Blank screen
@@ -280,6 +282,10 @@ if __name__ == '__main__':
                         help="Seed used by random number generator. 0 to disable.")
     parser.add_argument("--out_video", "-o", action="store_true",
                         help="If passed, save a video of the run. Slows down the simulation 2x.")
+    parser.add_argument("--ignore_error", "-i", action="store_true",
+                        help="If passed, errors from players will be ignored.")
+    parser.add_argument("--exit_end", "-e", action="store_true",
+                        help="If passed, simulation will exit when finished. Useful when debugging.")
     args = parser.parse_args()
 
     # logging.basicConfig(level=logging.DEBUG)
@@ -292,6 +298,8 @@ if __name__ == '__main__':
     player_timeout = args.timeout
     spawn = args.spawn
     seed = args.seed
+    ignore_error = args.ignore_error
+    exit_end = args.exit_end
 
     player_name_list = [args.player1, args.player2, args.player3, args.player4]
     player_list = [(name, get_player(name)) for name in player_name_list]
@@ -307,12 +315,13 @@ if __name__ == '__main__':
 
     if args.no_gui:
         voronoi_engine = VoronoiEngine(player_list, map_size=100, total_days=total_days, save_video=save_video,
-                                       spawn_freq=spawn, player_timeout=player_timeout, seed=seed)
+                                       spawn_freq=spawn, player_timeout=player_timeout, seed=seed,
+                                       ignore_error=ignore_error)
         voronoi_engine.run_all()
     else:
         user_interface = VoronoiInterface(player_list, total_days=total_days, map_size=map_size,
                                           player_timeout=player_timeout, game_window_height=game_window_height,
                                           save_video=save_video, fps=fps,
-                                          spawn_freq=spawn, seed=seed)
+                                          spawn_freq=spawn, seed=seed, ignore_error=ignore_error, exit_end=exit_end)
         user_interface.run()
 
