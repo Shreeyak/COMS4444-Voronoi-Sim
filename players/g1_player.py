@@ -287,8 +287,8 @@ class Player:
                 viable_incursions.append(incursion_)
                 edge_incursion_begin_list.append(edge_incursion_begin)
 
-        if len(edge_incursion_begin_list) > 0:
-            plot_debug_incur(superpolygon, viable_incursions, edge_incursion_begin_list, self.current_day)
+        # if len(edge_incursion_begin_list) > 0:
+        #     plot_debug_incur(superpolygon, viable_incursions, edge_incursion_begin_list, self.current_day)
 
         return viable_incursions
 
