@@ -395,8 +395,9 @@ class Player:
         if len(candidates) > 0:
             return max(list(candidates), key=lambda pt: (pt[0] - unit[0]) ** 2 + (pt[1] - unit[1]) ** 2)
         else:
-            raise RuntimeError(f"Polygons do not share an edge. Could be they only share a corner, possibly"
-                                f"error in cleaning edges from delaunay")
+            return None
+            # raise RuntimeError(f"Polygons do not share an edge. Could be they only share a corner, possibly"
+            #                     f"error in cleaning edges from delaunay")
 
     def play_aggressive(self, all_points, pt_to_poly, adj_dict, discrete_pts):
         moves = []
@@ -416,13 +417,19 @@ class Player:
             neighboring_enemies = [n for n in neighbors if n not in friendly_units_discrete]
             neighboring_enemy_polygons = [pt_to_poly[ne] for ne in neighboring_enemies]
 
-            # TODO: SPLIT CONSEQUENCES OF IF-ELSE INTO 2 FUNCTIONS
-            # [ ] - find d1 units
-            # [ ] - find d2 units
-
             if len(neighboring_enemies) == 0:
-                # Moving to centroid will spread units out
-                target = current_polygon.centroid.coords[0]
+                new_neighboring_enemies = []
+                for ne in neighbors:
+                    neighboring_enemies_ne = [n for n in adj_dict[ne] if n not in friendly_units_discrete]
+                    if len(neighboring_enemies_ne) > 0:
+                        new_neighboring_enemies.append(ne)
+                
+                new_friendly_units_discrete = [u for u in friendly_units_discrete if u not in new_neighboring_enemies]
+                
+                target = self.get_border_unit_target(unit, current_polygon, adj_dict.copy(), new_friendly_units_discrete, pt_to_poly)
+                if target is None:
+                    # Moving to centroid will spread units out
+                    target = current_polygon.centroid.coords[0]
             else:
                 target = self.get_border_unit_target(unit, current_polygon, adj_dict.copy(), friendly_units_discrete, pt_to_poly)
 
