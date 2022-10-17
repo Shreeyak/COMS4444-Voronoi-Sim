@@ -195,24 +195,6 @@ class CreateGraph:
         return edges_cleaned, edge_player_id
 
 
-    # def create_superpolygon(self, vor_regions, pt_to_poly, adj_dict):
-        #     friendly_polygons = []
-        #     for idx, reg in enumerate(vor_regions):
-        #         if pt_to_poly[idx] == self.player_idx:
-        #             friendly_polygons.append(reg)
-        #
-        #     superpolygon = shapely.ops.unary_union(friendly_polygons)
-        #
-        #     s_neighbors = set()
-        #     for unit in adj_dict:
-        #         if superpolygon.contains(shapely.geometry.Point(unit[0], unit[1])):
-        #             for neigh in adj_dict[unit]:
-        #                 if not superpolygon.contains(shapely.geometry.Point(neigh[0], neigh[1])):
-        #                     s_neighbors.add(neigh)
-        #     s_neighbors = list(s_neighbors)
-        #
-        #     return superpolygon, s_neighbors
-
         # def find_target_from_superpolygon(self, unit, superpolygon, s_neighbors, friendly_units, pt_to_poly_idx, vor_regions):
         #     neighboring_enemies = [n for n in s_neighbors if n not in friendly_units]
         #     neighboring_enemy_polygons = [pt_to_poly_idx[ne] for ne in neighboring_enemies]
@@ -267,6 +249,34 @@ class Player:
 
         self.home_offset = 0.5
         self.kdtree = None
+
+    def create_superpolygon(self, vor_regions, pt_to_poly, adj_dict):
+        friendly_polygons = []
+        for idx, reg in enumerate(vor_regions):
+            if pt_to_poly[idx] == self.player_idx:
+                friendly_polygons.append(reg)
+
+        superpolygon = shapely.ops.unary_union(friendly_polygons)
+        convexhull = superpolygon.convex_hull
+        incursions = convexhull.intersection(superpolygon)
+
+        viable_incursions = []
+        for incursion in list(incursions.geoms):
+            edges = [shapely.geometry.LineString(incursion.exterior.coords)]
+            for edge in edges:
+                if convexhull.contains(edge):
+                    if edge.length/incursion.length <= 0.25: # arbitrary number - consider anything that is at least square
+                        viable_incursions.append(incursion)
+        return viable_incursions
+
+        # s_neighbors = set()
+        # for unit in adj_dict:
+        #     if superpolygon.contains(shapely.geometry.Point(unit[0], unit[1])):
+        #         for neigh in adj_dict[unit]:
+        #             if not superpolygon.contains(shapely.geometry.Point(neigh[0], neigh[1])):
+        #                 s_neighbors.add(neigh)
+        # s_neighbors = list(s_neighbors)
+        # return superpolygon, s_neighbors
 
     def play(self, unit_id, unit_pos, map_states, current_scores, total_scores) -> [tuple[float, float]]:
         """Function which based on current game state returns the distance and angle of each unit active on the board
