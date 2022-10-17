@@ -9,7 +9,8 @@ import shapely.geometry
 import shapely.ops
 import scipy
 
-from tests.plot_funcs import plot_units_and_edges
+from tests import plot_funcs
+from tests.plot_funcs import plot_units_and_edges, plot_poly_list, plot_incursions, plot_line_list, plot_debug_incur
 
 warnings.filterwarnings("ignore", category=shapely.errors.ShapelyDeprecationWarning)
 
@@ -58,6 +59,7 @@ class CreateGraph:
         # Find mapping from pts idx to polys (via nearest unit) and poly to player
         pt_to_poly_idx = {}  # Polygon isn't hashable, so we use polygon idx.
         pt_to_poly = {}
+        poly_idx_to_pt = {}
 
         for region_idx, region in enumerate(vor_regions):
             # Voronoi regions are all convex. Nearest pt to centroid must be point belonging to region
@@ -68,8 +70,9 @@ class CreateGraph:
 
             pt_to_poly_idx[discrete_pts[ii]] = region_idx
             pt_to_poly[discrete_pts[ii]] = region
+            poly_idx_to_pt[region_idx] = discrete_pts[ii]
 
-        return pt_to_poly_idx, pt_to_poly
+        return pt_to_poly_idx, pt_to_poly, poly_idx_to_pt
 
     @staticmethod
     def delaunay2edges(tri_simplices) -> np.ndarray:
@@ -250,23 +253,43 @@ class Player:
         self.home_offset = 0.5
         self.kdtree = None
 
-    def create_superpolygon(self, vor_regions, pt_to_poly, adj_dict):
+    def get_incursions_polys(self, vor_regions, discrete_pt2player, poly_idx_to_pt):
         friendly_polygons = []
-        for idx, reg in enumerate(vor_regions):
-            if pt_to_poly[idx] == self.player_idx:
+        for reg_idx, reg in enumerate(vor_regions):
+            pt_ = poly_idx_to_pt[reg_idx]
+            pl_ = discrete_pt2player[pt_]
+            if pl_ == self.player_idx:
                 friendly_polygons.append(reg)
 
         superpolygon = shapely.ops.unary_union(friendly_polygons)
         convexhull = superpolygon.convex_hull
-        incursions = convexhull.intersection(superpolygon)
+        incursions_ = convexhull.difference(superpolygon)
+        if incursions_.is_empty:
+            return []
+
+        if isinstance(incursions_, shapely.geometry.MultiPolygon):
+            incursions = list(incursions_.geoms)
+        elif isinstance(incursions_, shapely.geometry.Polygon):
+            incursions = [incursions_]
+        else:
+            incursions = []
+            logging.warning(f"UNKNOWN condition: incursion is neither poly nor multipoly")
 
         viable_incursions = []
-        for incursion in list(incursions.geoms):
-            edges = [shapely.geometry.LineString(incursion.exterior.coords)]
-            for edge in edges:
-                if convexhull.contains(edge):
-                    if edge.length/incursion.length <= 0.25: # arbitrary number - consider anything that is at least square
-                        viable_incursions.append(incursion)
+        edge_incursion_begin_list = []
+        for incursion_ in incursions:
+            # edges = shapely.geometry.LineString(incursion_.exterior.coords)
+            edge_incursion_begin_f, edge_incursion_begin_b = shapely.ops.shared_paths(convexhull.exterior, incursion_.exterior)
+            edge_incursion_begin = edge_incursion_begin_f if not edge_incursion_begin_f.is_empty else edge_incursion_begin_b
+
+            edge_incursion_begin = edge_incursion_begin.geoms[0]  # There should be only 1 linestr in the multiplinestr
+            if edge_incursion_begin.length / incursion_.length <= 0.33:  # arbitrary number - consider anything that is at least square
+                viable_incursions.append(incursion_)
+                edge_incursion_begin_list.append(edge_incursion_begin)
+
+        # if len(edge_incursion_begin_list) > 0:
+        #     plot_debug_incur(superpolygon, viable_incursions, edge_incursion_begin_list, self.current_day)
+
         return viable_incursions
 
         # s_neighbors = set()
@@ -329,7 +352,7 @@ class Player:
 
         # Find mapping from pts idx to polys (via nearest unit) and poly to player
         self.kdtree = scipy.spatial.KDTree(discrete_pts)
-        pt_to_poly_idx, pt_to_poly = cg.create_pt_to_poly_and_idx(self.kdtree, discrete_pts, vor_regions)
+        pt_to_poly_idx, pt_to_poly, poly_idx_to_pt = cg.create_pt_to_poly_and_idx(self.kdtree, discrete_pts, vor_regions)
 
         # Get the graph of connected pts via triangulation
         tri = scipy.spatial.Delaunay(np.array(discrete_pts))
@@ -345,7 +368,7 @@ class Player:
         # Create adjacency list for graph of armies
         adj_dict = cg.create_adj_dict(edges, discrete_pts)
 
-        moves = self.play_aggressive(all_points, pt_to_poly, adj_dict)
+        moves = self.play_aggressive(all_points, pt_to_poly, adj_dict, discrete_pts)
         # if self.current_day <= (50 - self.spawn_days) or total_scores[self.player_idx] < max(total_scores):
         #     # Create union of all friendly polygons and list of its neighbors
         #     superpolygon, s_neighbors = self.create_superpolygon(vor_regions, pt_to_poly, adj_dict)
@@ -354,6 +377,12 @@ class Player:
         # else:
         #     moves = self.play_cautious(unit_id, unit_pos, vor_regions, pt_player_dict, pt_to_poly_idx, adj_dict,
         #                                superpolygon, s_neighbors)
+
+        incursions = self.get_incursions_polys(vor_regions, discrete_pt2player, poly_idx_to_pt)
+        # print(incursions)
+        # if len(incursions) > 0:
+        #     all_polys = list(pt_to_poly.values())
+        #     plot_incursions(all_polys, incursions)
 
         self.current_day += 1
         return moves
@@ -384,7 +413,32 @@ class Player:
     #
     #     return moves
 
-    def play_aggressive(self, all_points, pt_to_poly, adj_dict):
+    def get_border_unit_target(self, unit, current_polygon, adj_dict, friendly_units_discrete, pt_to_poly):
+        # Strategy - Move to furthest vertex of neighboring edges
+        neighbors = adj_dict[unit]
+        neighboring_enemies = [n for n in neighbors if n not in friendly_units_discrete]
+        neighboring_enemy_polygons = [pt_to_poly[ne] for ne in neighboring_enemies]
+        candidates = set()
+        for polygon in neighboring_enemy_polygons:
+            intersection = current_polygon.intersection(polygon)
+            if (
+                isinstance(intersection, shapely.geometry.LineString) or
+                isinstance(intersection, shapely.geometry.Point)
+            ):
+                # NOTE: We allow polys that only share a corner to be considered as neighbors
+                points = intersection.coords
+                for point in list(points):
+                    candidates.add(point)
+
+        # further enemy polygon vertex on shared edges
+        if len(candidates) > 0:
+            return max(list(candidates), key=lambda pt: (pt[0] - unit[0]) ** 2 + (pt[1] - unit[1]) ** 2)
+        else:
+            return None
+            # raise RuntimeError(f"Polygons do not share an edge. Could be they only share a corner, possibly"
+            #                     f"error in cleaning edges from delaunay")
+
+    def play_aggressive(self, all_points, pt_to_poly, adj_dict, discrete_pts):
         moves = []
 
         # Generate a move for every unit
@@ -392,6 +446,9 @@ class Player:
         friendly_units_discrete = [(int(x) + self.home_offset, int(y) + self.home_offset) for (x, y) in friendly_units]
 
         for unit_, unit in zip(friendly_units, friendly_units_discrete):
+            if unit not in discrete_pts:
+                continue
+
             # All polys, etc are indexed with discretized pts
             current_polygon = pt_to_poly[unit]
 
@@ -400,28 +457,21 @@ class Player:
             neighboring_enemy_polygons = [pt_to_poly[ne] for ne in neighboring_enemies]
 
             if len(neighboring_enemies) == 0:
-                # Moving to centroid will spread units out
-                target = current_polygon.centroid.coords[0]
+                new_neighboring_enemies = []
+                for ne in neighbors:
+                    neighboring_enemies_ne = [n for n in adj_dict[ne] if n not in friendly_units_discrete]
+                    if len(neighboring_enemies_ne) > 0:
+                        new_neighboring_enemies.append(ne)
+                
+                new_friendly_units_discrete = [u for u in friendly_units_discrete if u not in new_neighboring_enemies]
+                
+                target = self.get_border_unit_target(unit, current_polygon, adj_dict.copy(), new_friendly_units_discrete, pt_to_poly)
+                if target is None:
+                    # Moving to centroid will spread units out
+                    target = current_polygon.centroid.coords[0]
             else:
-                # Strategy - Move to furthest vertex of neighboring edges
-                candidates = set()
-                for polygon in neighboring_enemy_polygons:
-                    intersection = current_polygon.intersection(polygon)
-                    if (
-                        isinstance(intersection, shapely.geometry.LineString) or
-                        isinstance(intersection, shapely.geometry.Point)
-                    ):
-                        # NOTE: We allow polys that only share a corner to be considered as neighbors
-                        points = intersection.coords
-                        for point in list(points):
-                            candidates.add(point)
+                target = self.get_border_unit_target(unit, current_polygon, adj_dict.copy(), friendly_units_discrete, pt_to_poly)
 
-                # further enemy polygon vertex on shared edges
-                if len(candidates) > 0:
-                    target = max(list(candidates), key=lambda pt: (pt[0] - unit[0]) ** 2 + (pt[1] - unit[1]) ** 2)
-                else:
-                    raise RuntimeError(f"Polygons do not share an edge. Could be they only share a corner, possibly"
-                                       f"error in cleaning edges from delaunay")
 
                 # # Strategy - Move to middle of edge - closest edge
                 # candidates = set()
