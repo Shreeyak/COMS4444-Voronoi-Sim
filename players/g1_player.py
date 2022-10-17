@@ -262,7 +262,10 @@ class Player:
                 friendly_polygons.append(reg)
 
         superpolygon = shapely.ops.unary_union(friendly_polygons)
-        convexhull = superpolygon.convex_hull
+        min_x, min_y, max_x, max_y = superpolygon.bounds
+        bound_points = shapely.geometry.MultiPoint([(min_x,min_y),(max_x,min_y),(min_x,max_y),(max_x,max_y)])
+        extended_polygon = bound_points.union(shapely.geometry.MultiPoint(superpolygon.exterior.coords))
+        convexhull = extended_polygon.convex_hull
         incursions_ = convexhull.difference(superpolygon)
         if incursions_.is_empty:
             return []
