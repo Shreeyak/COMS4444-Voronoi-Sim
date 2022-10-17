@@ -253,6 +253,14 @@ class Player:
         self.home_offset = 0.5
         self.kdtree = None
 
+        _MAP_W = self.max_dim
+        self.spawn_loc = {
+            0: (self.home_offset, self.home_offset),
+            1: (_MAP_W - self.home_offset, self.home_offset),
+            2: (_MAP_W - self.home_offset, _MAP_W - self.home_offset),
+            3: (self.home_offset, _MAP_W - self.home_offset)
+        }
+
     def get_incursions_polys(self, vor_regions, discrete_pt2player, poly_idx_to_pt):
         friendly_polygons = []
         for reg_idx, reg in enumerate(vor_regions):
@@ -263,10 +271,16 @@ class Player:
 
         superpolygon = shapely.ops.unary_union(friendly_polygons)
         min_x, min_y, max_x, max_y = superpolygon.bounds
-        bound_points = shapely.geometry.MultiPoint([(min_x,min_y),(max_x,min_y),(min_x,max_y),(max_x,max_y)])
+        sl = self.spawn_loc[self.player_idx]
+        if sl == (min_x, min_y) or sl == (max_x, max_y):
+            bound_points = shapely.geometry.MultiPoint([(max_x, min_y), (min_x, max_y)])
+        else:
+            bound_points = shapely.geometry.MultiPoint([(max_x, max_y), (min_x, min_y)])
+
         extended_polygon = bound_points.union(shapely.geometry.MultiPoint(superpolygon.exterior.coords))
         convexhull = extended_polygon.convex_hull
         incursions_ = convexhull.difference(superpolygon)
+
         if incursions_.is_empty:
             return []
 
@@ -290,8 +304,8 @@ class Player:
                 viable_incursions.append(incursion_)
                 edge_incursion_begin_list.append(edge_incursion_begin)
 
-        # if len(edge_incursion_begin_list) > 0:
-        #     plot_debug_incur(superpolygon, viable_incursions, edge_incursion_begin_list, self.current_day)
+        if len(edge_incursion_begin_list) > 0:
+            plot_debug_incur(superpolygon, viable_incursions, edge_incursion_begin_list, self.current_day)
 
         return viable_incursions
 
