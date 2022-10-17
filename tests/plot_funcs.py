@@ -2,7 +2,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 from descartes.patch import PolygonPatch  # plotting
-from tests.shapely_figures import SIZE, set_limits, plot_coords, plot_bounds, plot_line, BLUE, GRAY
+from tests.shapely_figures import SIZE, set_limits, plot_coords, plot_bounds, plot_line, BLUE, GRAY, RED, GREEN
 
 import matplotlib as mpl
 mpl.use('TkAgg')  # For macOS. Change engine.
@@ -59,4 +59,67 @@ def plot_poly_list(poly_list):
     for poly in poly_list:
         patch = PolygonPatch(poly, facecolor=BLUE, alpha=0.3, zorder=-1)  # edgecolor=BLUE
         ax.add_patch(patch)
+    plt.gca().invert_yaxis()
     plt.show()
+
+def plot_incursions(all_polys_list, incursion_poly_list):
+    # Plot
+    fig = plt.figure(1, figsize=SIZE, dpi=90)
+    fig.set_frameon(True)
+    ax = fig.add_subplot(111)
+
+    set_limits(ax, 0, 100, 0, 100)
+
+    for poly in all_polys_list:
+        if poly not in incursion_poly_list:
+            patch = PolygonPatch(poly, facecolor=BLUE, alpha=0.3, zorder=-1)  # edgecolor=BLUE
+            ax.add_patch(patch)
+    for poly in incursion_poly_list:
+        patch = PolygonPatch(poly, facecolor=RED, alpha=0.3, zorder=-1)  # edgecolor=BLUE
+        ax.add_patch(patch)
+
+    plt.gca().invert_yaxis()
+    plt.show()
+
+
+def plot_line_list(line_list):
+    # Plot
+    fig = plt.figure(1, figsize=SIZE, dpi=90)
+    fig.set_frameon(True)
+    ax = fig.add_subplot(111)
+
+    set_limits(ax, 0, 100, 0, 100)
+
+    # Plot the valid edges
+    for linestr in line_list:
+        x, y = linestr.xy
+        ax.plot(x, y, color=GREEN, alpha=0.5, linewidth=3, solid_capstyle='round', zorder=2)
+
+    plt.gca().invert_yaxis()
+    plt.show()
+
+def plot_debug_incur(superpolygon, incursions, edge_incursion_begin_list, day):
+    # Plot
+    fig = plt.figure(1, figsize=SIZE, dpi=90)
+    fig.set_frameon(True)
+    ax = fig.add_subplot(111)
+
+    set_limits(ax, 0, 100, 0, 100)
+
+
+    patch = PolygonPatch(superpolygon, facecolor=BLUE, alpha=0.3, zorder=-1)  # edgecolor=BLUE
+    ax.add_patch(patch)
+
+    for poly in incursions:
+        patch = PolygonPatch(poly, facecolor=RED, alpha=0.3, zorder=-1)  # edgecolor=BLUE
+        ax.add_patch(patch)
+
+    # Plot the valid edges
+    for edge_incursion_begin in edge_incursion_begin_list:
+
+        x, y = edge_incursion_begin.xy
+        ax.plot(x, y, color=GREEN, alpha=0.5, linewidth=3, solid_capstyle='round', zorder=2)
+
+    plt.gca().invert_yaxis()
+    # plt.show()
+    plt.savefig(f"/home/shrek/work/cu_course/prob-solving/COMS4444-Voronoi-Sim/tests/plot_incur/{day}.png", dpi=300)

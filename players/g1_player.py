@@ -9,7 +9,8 @@ import shapely.geometry
 import shapely.ops
 import scipy
 
-from tests.plot_funcs import plot_units_and_edges
+from tests import plot_funcs
+from tests.plot_funcs import plot_units_and_edges, plot_poly_list, plot_incursions, plot_line_list, plot_debug_incur
 
 warnings.filterwarnings("ignore", category=shapely.errors.ShapelyDeprecationWarning)
 
@@ -58,6 +59,7 @@ class CreateGraph:
         # Find mapping from pts idx to polys (via nearest unit) and poly to player
         pt_to_poly_idx = {}  # Polygon isn't hashable, so we use polygon idx.
         pt_to_poly = {}
+        poly_idx_to_pt = {}
 
         for region_idx, region in enumerate(vor_regions):
             # Voronoi regions are all convex. Nearest pt to centroid must be point belonging to region
@@ -68,8 +70,9 @@ class CreateGraph:
 
             pt_to_poly_idx[discrete_pts[ii]] = region_idx
             pt_to_poly[discrete_pts[ii]] = region
+            poly_idx_to_pt[region_idx] = discrete_pts[ii]
 
-        return pt_to_poly_idx, pt_to_poly
+        return pt_to_poly_idx, pt_to_poly, poly_idx_to_pt
 
     @staticmethod
     def delaunay2edges(tri_simplices) -> np.ndarray:
@@ -195,24 +198,6 @@ class CreateGraph:
         return edges_cleaned, edge_player_id
 
 
-    # def create_superpolygon(self, vor_regions, pt_to_poly, adj_dict):
-        #     friendly_polygons = []
-        #     for idx, reg in enumerate(vor_regions):
-        #         if pt_to_poly[idx] == self.player_idx:
-        #             friendly_polygons.append(reg)
-        #
-        #     superpolygon = shapely.ops.unary_union(friendly_polygons)
-        #
-        #     s_neighbors = set()
-        #     for unit in adj_dict:
-        #         if superpolygon.contains(shapely.geometry.Point(unit[0], unit[1])):
-        #             for neigh in adj_dict[unit]:
-        #                 if not superpolygon.contains(shapely.geometry.Point(neigh[0], neigh[1])):
-        #                     s_neighbors.add(neigh)
-        #     s_neighbors = list(s_neighbors)
-        #
-        #     return superpolygon, s_neighbors
-
         # def find_target_from_superpolygon(self, unit, superpolygon, s_neighbors, friendly_units, pt_to_poly_idx, vor_regions):
         #     neighboring_enemies = [n for n in s_neighbors if n not in friendly_units]
         #     neighboring_enemy_polygons = [pt_to_poly_idx[ne] for ne in neighboring_enemies]
@@ -268,6 +253,68 @@ class Player:
         self.home_offset = 0.5
         self.kdtree = None
 
+        _MAP_W = self.max_dim
+        self.spawn_loc = {
+            0: (0, 0),
+            1: (_MAP_W, 0),
+            2: (_MAP_W, _MAP_W),
+            3: (0, _MAP_W)
+        }
+
+    def get_incursions_polys(self, vor_regions, discrete_pt2player, poly_idx_to_pt):
+        friendly_polygons = []
+        for reg_idx, reg in enumerate(vor_regions):
+            pt_ = poly_idx_to_pt[reg_idx]
+            pl_ = discrete_pt2player[pt_]
+            if pl_ == self.player_idx:
+                friendly_polygons.append(reg)
+
+        superpolygon = shapely.ops.unary_union(friendly_polygons)
+        min_x, min_y, max_x, max_y = superpolygon.bounds
+        sl = self.spawn_loc[self.player_idx]
+        if sl == (min_x, min_y) or sl == (max_x, max_y):
+            bound_points = shapely.geometry.MultiPoint([(max_x, min_y), (min_x, max_y)])
+        else:
+            bound_points = shapely.geometry.MultiPoint([(max_x, max_y), (min_x, min_y)])
+
+        extended_polygon = bound_points.union(shapely.geometry.MultiPoint(superpolygon.exterior.coords))
+        convexhull = extended_polygon.convex_hull
+        incursions_ = convexhull.difference(superpolygon)
+
+        if incursions_.is_empty:
+            return []
+
+        if isinstance(incursions_, shapely.geometry.MultiPolygon):
+            incursions = list(incursions_.geoms)
+        elif isinstance(incursions_, shapely.geometry.Polygon):
+            incursions = [incursions_]
+        else:
+            incursions = []
+            logging.warning(f"UNKNOWN condition: incursion is neither poly nor multipoly")
+
+        viable_incursions = []
+        edge_incursion_boundaries = []  # Outer edge near our border where incursion begins
+        for incursion_ in incursions:
+            # edges = shapely.geometry.LineString(incursion_.exterior.coords)
+            edge_incursion_begin_f, edge_incursion_begin_b = shapely.ops.shared_paths(convexhull.exterior, incursion_.exterior)
+            edge_incursion_begin = edge_incursion_begin_f if not edge_incursion_begin_f.is_empty else edge_incursion_begin_b
+
+            map_poly = shapely.geometry.Polygon([(0, 0), (0, 100), (100, 100), (100, 0), (0, 0)])
+            valid_e = None
+            for edge_ in edge_incursion_begin.geoms:
+                if not map_poly.exterior.contains(edge_):
+                    valid_e = edge_
+
+            # edge_incursion_begin = edge_incursion_begin.geoms[0]  # There should be only 1 linestr in the multiplinestr
+            if valid_e is not None and valid_e.length / incursion_.length <= 0.45:  # arbitrary number - consider anything that is at least square
+                viable_incursions.append(incursion_)
+                edge_incursion_boundaries.append(valid_e)
+
+        # if len(edge_incursion_boundaries) > 0 and self.current_day > 193:
+        #     plot_debug_incur(superpolygon, viable_incursions, edge_incursion_boundaries, self.current_day)
+
+        return viable_incursions
+
     def play(self, unit_id, unit_pos, map_states, current_scores, total_scores) -> [tuple[float, float]]:
         """Function which based on current game state returns the distance and angle of each unit active on the board
 
@@ -319,7 +366,7 @@ class Player:
 
         # Find mapping from pts idx to polys (via nearest unit) and poly to player
         self.kdtree = scipy.spatial.KDTree(discrete_pts)
-        pt_to_poly_idx, pt_to_poly = cg.create_pt_to_poly_and_idx(self.kdtree, discrete_pts, vor_regions)
+        pt_to_poly_idx, pt_to_poly, poly_idx_to_pt = cg.create_pt_to_poly_and_idx(self.kdtree, discrete_pts, vor_regions)
 
         # Get the graph of connected pts via triangulation
         tri = scipy.spatial.Delaunay(np.array(discrete_pts))
@@ -344,6 +391,12 @@ class Player:
         # else:
         #     moves = self.play_cautious(unit_id, unit_pos, vor_regions, pt_player_dict, pt_to_poly_idx, adj_dict,
         #                                superpolygon, s_neighbors)
+
+        incursions = self.get_incursions_polys(vor_regions, discrete_pt2player, poly_idx_to_pt)
+        # print(incursions)
+        # if len(incursions) > 0:
+        #     all_polys = list(pt_to_poly.values())
+        #     plot_incursions(all_polys, incursions)
 
         self.current_day += 1
         return moves
