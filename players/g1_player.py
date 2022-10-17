@@ -320,6 +320,38 @@ class Player:
 
         return viable_incursions
 
+    def get_groups_and_outliers(self, all_points, eps=3, min_samples=2, per_player=False):
+        # DBSCAN - create dicts of groups and outliers
+        groups_and_outliers_per_player = defaultdict(lambda: {'groups': defaultdict(list), 'outliers': []})
+        all_groups_and_outliers = {'groups': defaultdict(list), 'outliers': []}
+
+        if per_player:
+            for pl in range(1, 5):
+                if pl != self.player_idx:
+                    np_points = np.array(all_points[pl])
+                    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(np_points)
+                    for i in range(len(np_points)):
+                        group = clustering.labels_[i]
+                        if group == -1:
+                            groups_and_outliers_per_player[pl]['outliers'].append(np_points[i])
+                        else:
+                            groups_and_outliers_per_player[pl]['groups'][group].append(np_points[i])
+            return groups_and_outliers_per_player
+        else:
+            np_all_points = np.empty(0, dtype=int)
+            for pl in range(1, 5):
+                if pl != self.player_idx:
+                    np_points = np.array(all_points[pl])
+                    np_all_points = np.append(np_all_points, np_points)
+            clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(np_all_points)
+            for i in range(len(np_all_points)):
+                group = clustering.labels_[i]
+                if group == -1:
+                    all_groups_and_outliers['outliers'].append(np_all_points[i])
+                else:
+                    all_groups_and_outliers['groups'][group].append(np_all_points[i])
+            return all_groups_and_outliers
+
     def play(self, unit_id, unit_pos, map_states, current_scores, total_scores) -> [tuple[float, float]]:
         """Function which based on current game state returns the distance and angle of each unit active on the board
 
@@ -359,37 +391,7 @@ class Player:
         discrete_pt2player, all_points = cg.create_pts_player_dict(unit_pos)
 
         # DBSCAN - create dicts of groups and outliers
-        def get_groups_and_outliers(all_points, eps=3, min_samples=2, per_player=False):
-            groups_and_outliers_per_player = defaultdict(lambda: {'groups':defaultdict(list), 'outliers':[]})
-            all_groups_and_outliers = {'groups':defaultdict(list), 'outliers':[]}
-
-            if per_player:
-                for pl in range(1,5):
-                    if pl != self.player_idx:
-                        np_points = np.array(all_points[pl])
-                        clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(np_points)
-                        for i in range(len(np_points)):
-                            group = clustering.labels_[i]
-                            if group == -1:
-                                groups_and_outliers_per_player[pl]['outliers'].append(np_points[i])
-                            else:
-                                groups_and_outliers_per_player[pl]['groups'][group].append(np_points[i])
-                return groups_and_outliers_per_player
-            else:
-                np_all_points = np.empty(0, dtype=int)
-                for pl in range(1, 5):
-                    if pl != self.player_idx:
-                        np_points = np.array(all_points[pl])
-                        np_all_points = np.append(np_all_points, np_points)
-                clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(np_all_points)
-                for i in range(len(np_all_points)):
-                    group = clustering.labels_[i]
-                    if group == -1:
-                        all_groups_and_outliers['outliers'].append(np_all_points[i])
-                    else:
-                        all_groups_and_outliers['groups'][group].append(np_all_points[i])
-                return all_groups_and_outliers
-
+        all_groups_and_outliers = self.get_groups_and_outliers(all_points, eps=3, min_samples=2, per_player=False)
 
         # Construct 2 lists: triangulation/voronoi takes discrete, strategy takes continuous position
         # Note: Discretized points will have duplicates, which are removed (disputed points, both removed).
