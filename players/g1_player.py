@@ -338,11 +338,11 @@ class Player:
                             groups_and_outliers_per_player[pl]['groups'][group].append(np_points[i])
             return groups_and_outliers_per_player
         else:
-            np_all_points = np.empty(0, dtype=int)
-            for pl in range(1, 5):
+            np_all_points = []
+            for pl in range(4):
                 if pl != self.player_idx:
-                    np_points = np.array(all_points[pl])
-                    np_all_points = np.append(np_all_points, np_points)
+                    np_all_points += all_points[pl]
+            np_all_points = np.array(np_all_points)
             clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(np_all_points)
             for i in range(len(np_all_points)):
                 group = clustering.labels_[i]
