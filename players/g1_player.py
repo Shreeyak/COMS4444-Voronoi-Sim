@@ -8,6 +8,7 @@ import shapely.errors
 import shapely.geometry
 import shapely.ops
 import scipy
+from sklearn.cluster import DBSCAN
 
 from tests import plot_funcs
 from tests.plot_funcs import plot_units_and_edges, plot_poly_list, plot_incursions, plot_line_list, plot_debug_incur
@@ -218,7 +219,6 @@ class CreateGraph:
         #
         #     return target
 
-
 class Player:
     def __init__(
         self, rng: np.random.Generator, logger: logging.Logger, total_days: int, spawn_days: int,
@@ -261,6 +261,8 @@ class Player:
             3: (0, _MAP_W)
         }
 
+
+
     def get_incursions_polys(self, vor_regions, discrete_pt2player, poly_idx_to_pt):
         friendly_polygons = []
         for reg_idx, reg in enumerate(vor_regions):
@@ -296,7 +298,10 @@ class Player:
         edge_incursion_boundaries = []  # Outer edge near our border where incursion begins
         for incursion_ in incursions:
             # edges = shapely.geometry.LineString(incursion_.exterior.coords)
-            edge_incursion_begin_f, edge_incursion_begin_b = shapely.ops.shared_paths(convexhull.exterior, incursion_.exterior)
+            sp = shapely.ops.shared_paths(convexhull.exterior, incursion_.exterior)
+            if len(sp) == 0:
+                continue
+            edge_incursion_begin_f, edge_incursion_begin_b = sp
             edge_incursion_begin = edge_incursion_begin_f if not edge_incursion_begin_f.is_empty else edge_incursion_begin_b
 
             map_poly = shapely.geometry.Polygon([(0, 0), (0, 100), (100, 100), (100, 0), (0, 0)])
@@ -351,10 +356,43 @@ class Player:
         }
 
         cg = CreateGraph(self.home_offset)
+        discrete_pt2player, all_points = cg.create_pts_player_dict(unit_pos)
+
+        # DBSCAN - create dicts of groups and outliers
+        def get_groups_and_outliers(all_points, eps=3, min_samples=2, per_player=False):
+            groups_and_outliers_per_player = defaultdict(lambda: {'groups':defaultdict(list), 'outliers':[]})
+            all_groups_and_outliers = {'groups':defaultdict(list), 'outliers':[]}
+
+            if per_player:
+                for pl in range(1,5):
+                    if pl != self.player_idx:
+                        np_points = np.array(all_points[pl])
+                        clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(np_points)
+                        for i in range(len(np_points)):
+                            group = clustering.labels_[i]
+                            if group == -1:
+                                groups_and_outliers_per_player[pl]['outliers'].append(np_points[i])
+                            else:
+                                groups_and_outliers_per_player[pl]['groups'][group].append(np_points[i])
+                return groups_and_outliers_per_player
+            else:
+                np_all_points = np.empty(0, dtype=int)
+                for pl in range(1, 5):
+                    if pl != self.player_idx:
+                        np_points = np.array(all_points[pl])
+                        np_all_points = np.append(np_all_points, np_points)
+                clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(np_all_points)
+                for i in range(len(np_all_points)):
+                    group = clustering.labels_[i]
+                    if group == -1:
+                        all_groups_and_outliers['outliers'].append(np_all_points[i])
+                    else:
+                        all_groups_and_outliers['groups'][group].append(np_all_points[i])
+                return all_groups_and_outliers
+
 
         # Construct 2 lists: triangulation/voronoi takes discrete, strategy takes continuous position
         # Note: Discretized points will have duplicates, which are removed (disputed points, both removed).
-        discrete_pt2player, all_points = cg.create_pts_player_dict(unit_pos)
         if len(all_points[self.player_idx]) == 0:
             return []  # No units on the map
 
