@@ -255,10 +255,10 @@ class Player:
 
         _MAP_W = self.max_dim
         self.spawn_loc = {
-            0: (self.home_offset, self.home_offset),
-            1: (_MAP_W - self.home_offset, self.home_offset),
-            2: (_MAP_W - self.home_offset, _MAP_W - self.home_offset),
-            3: (self.home_offset, _MAP_W - self.home_offset)
+            0: (0, 0),
+            1: (_MAP_W, 0),
+            2: (_MAP_W, _MAP_W),
+            3: (0, _MAP_W)
         }
 
     def get_incursions_polys(self, vor_regions, discrete_pt2player, poly_idx_to_pt):
@@ -293,30 +293,27 @@ class Player:
             logging.warning(f"UNKNOWN condition: incursion is neither poly nor multipoly")
 
         viable_incursions = []
-        edge_incursion_begin_list = []
+        edge_incursion_boundaries = []  # Outer edge near our border where incursion begins
         for incursion_ in incursions:
             # edges = shapely.geometry.LineString(incursion_.exterior.coords)
             edge_incursion_begin_f, edge_incursion_begin_b = shapely.ops.shared_paths(convexhull.exterior, incursion_.exterior)
             edge_incursion_begin = edge_incursion_begin_f if not edge_incursion_begin_f.is_empty else edge_incursion_begin_b
 
-            edge_incursion_begin = edge_incursion_begin.geoms[0]  # There should be only 1 linestr in the multiplinestr
-            if edge_incursion_begin.length / incursion_.length <= 0.33:  # arbitrary number - consider anything that is at least square
-                viable_incursions.append(incursion_)
-                edge_incursion_begin_list.append(edge_incursion_begin)
+            map_poly = shapely.geometry.Polygon([(0, 0), (0, 100), (100, 100), (100, 0), (0, 0)])
+            valid_e = None
+            for edge_ in edge_incursion_begin.geoms:
+                if not map_poly.exterior.contains(edge_):
+                    valid_e = edge_
 
-        if len(edge_incursion_begin_list) > 0:
-            plot_debug_incur(superpolygon, viable_incursions, edge_incursion_begin_list, self.current_day)
+            # edge_incursion_begin = edge_incursion_begin.geoms[0]  # There should be only 1 linestr in the multiplinestr
+            if valid_e is not None and valid_e.length / incursion_.length <= 0.45:  # arbitrary number - consider anything that is at least square
+                viable_incursions.append(incursion_)
+                edge_incursion_boundaries.append(valid_e)
+
+        # if len(edge_incursion_boundaries) > 0 and self.current_day > 193:
+        #     plot_debug_incur(superpolygon, viable_incursions, edge_incursion_boundaries, self.current_day)
 
         return viable_incursions
-
-        # s_neighbors = set()
-        # for unit in adj_dict:
-        #     if superpolygon.contains(shapely.geometry.Point(unit[0], unit[1])):
-        #         for neigh in adj_dict[unit]:
-        #             if not superpolygon.contains(shapely.geometry.Point(neigh[0], neigh[1])):
-        #                 s_neighbors.add(neigh)
-        # s_neighbors = list(s_neighbors)
-        # return superpolygon, s_neighbors
 
     def play(self, unit_id, unit_pos, map_states, current_scores, total_scores) -> [tuple[float, float]]:
         """Function which based on current game state returns the distance and angle of each unit active on the board
