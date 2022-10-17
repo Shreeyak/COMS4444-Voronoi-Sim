@@ -11,7 +11,8 @@ import scipy
 from sklearn.cluster import DBSCAN
 
 from tests import plot_funcs
-from tests.plot_funcs import plot_units_and_edges, plot_poly_list, plot_incursions, plot_line_list, plot_debug_incur
+from tests.plot_funcs import plot_units_and_edges, plot_poly_list, plot_incursions, plot_line_list, plot_debug_incur,\
+    plot_dbscan
 
 warnings.filterwarnings("ignore", category=shapely.errors.ShapelyDeprecationWarning)
 
@@ -391,7 +392,8 @@ class Player:
         discrete_pt2player, all_points = cg.create_pts_player_dict(unit_pos)
 
         # DBSCAN - create dicts of groups and outliers
-        all_groups_and_outliers = self.get_groups_and_outliers(all_points, eps=3, min_samples=2, per_player=False)
+        player_groups_and_outliers = self.get_groups_and_outliers(all_points, eps=3, min_samples=2, per_player=True)
+        plot_dbscan(player_groups_and_outliers, self.current_day)
 
         # Construct 2 lists: triangulation/voronoi takes discrete, strategy takes continuous position
         # Note: Discretized points will have duplicates, which are removed (disputed points, both removed).

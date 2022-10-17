@@ -13,6 +13,28 @@ player_colors = [(230, 25, 75), (245, 130, 49), (60, 180, 75), (67, 99, 216), (5
 player_colors = [(x/255, y/255, z/255) for (x, y, z) in player_colors]
 
 
+def plot_dbscan(dbscan_groups, day):
+    # Plot
+    fig = plt.figure(1, figsize=(6.0, 6.0), dpi=90)
+    fig.set_frameon(True)
+    ax = fig.add_subplot(111)
+    # set_limits(ax, 0, map_size, 0, map_size)
+    # Plot points and outliers
+    for pl, pt_dict in dbscan_groups.items():
+        all_pts = np
+        col = np.array(player_colors[pl])
+        for group in pl['groups']:
+            for pt in group:
+                x,y = pt
+                plt.plot(x, y, marker="o", markersize=6, markeredgecolor=col, markerfacecolor=col)
+        for out_pt in pl['outliers']:
+            x,y = out_pt
+            plt.plot(x, y, marker="o", markersize=6, markeredgecolor="magenta", markerfacecolor="magenta")
+    plt.gca().invert_yaxis()
+    # plt.show()
+    plt.savefig(f"/home/shrek/work/cu_course/prob-solving/COMS4444-Voronoi-Sim/tests/plot_map/{day}.png", dpi=300)
+
+
 def plot_units_and_edges(edges, edge_player_id, discrete_pts, discrete_players, pt_to_poly, day):
     # Plot
     fig = plt.figure(1, figsize=(6.0, 6.0), dpi=90)
