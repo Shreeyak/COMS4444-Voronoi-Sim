@@ -296,7 +296,10 @@ class Player:
         edge_incursion_boundaries = []  # Outer edge near our border where incursion begins
         for incursion_ in incursions:
             # edges = shapely.geometry.LineString(incursion_.exterior.coords)
-            edge_incursion_begin_f, edge_incursion_begin_b = shapely.ops.shared_paths(convexhull.exterior, incursion_.exterior)
+            sp = shapely.ops.shared_paths(convexhull.exterior, incursion_.exterior)
+            if len(sp) == 0:
+                continue
+            edge_incursion_begin_f, edge_incursion_begin_b = sp
             edge_incursion_begin = edge_incursion_begin_f if not edge_incursion_begin_f.is_empty else edge_incursion_begin_b
 
             map_poly = shapely.geometry.Polygon([(0, 0), (0, 100), (100, 100), (100, 0), (0, 0)])
