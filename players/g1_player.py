@@ -335,7 +335,7 @@ class Player:
         # Create adjacency list for graph of armies
         adj_dict = cg.create_adj_dict(edges, discrete_pts)
 
-        moves = self.play_aggressive(all_points, pt_to_poly, adj_dict)
+        moves = self.play_aggressive(all_points, pt_to_poly, adj_dict, discrete_pts)
         # if self.current_day <= (50 - self.spawn_days) or total_scores[self.player_idx] < max(total_scores):
         #     # Create union of all friendly polygons and list of its neighbors
         #     superpolygon, s_neighbors = self.create_superpolygon(vor_regions, pt_to_poly, adj_dict)
@@ -374,7 +374,31 @@ class Player:
     #
     #     return moves
 
-    def play_aggressive(self, all_points, pt_to_poly, adj_dict):
+    def get_border_unit_target(self, unit, current_polygon, adj_dict, friendly_units_discrete, pt_to_poly):
+        # Strategy - Move to furthest vertex of neighboring edges
+        neighbors = adj_dict[unit]
+        neighboring_enemies = [n for n in neighbors if n not in friendly_units_discrete]
+        neighboring_enemy_polygons = [pt_to_poly[ne] for ne in neighboring_enemies]
+        candidates = set()
+        for polygon in neighboring_enemy_polygons:
+            intersection = current_polygon.intersection(polygon)
+            if (
+                isinstance(intersection, shapely.geometry.LineString) or
+                isinstance(intersection, shapely.geometry.Point)
+            ):
+                # NOTE: We allow polys that only share a corner to be considered as neighbors
+                points = intersection.coords
+                for point in list(points):
+                    candidates.add(point)
+
+        # further enemy polygon vertex on shared edges
+        if len(candidates) > 0:
+            return max(list(candidates), key=lambda pt: (pt[0] - unit[0]) ** 2 + (pt[1] - unit[1]) ** 2)
+        else:
+            raise RuntimeError(f"Polygons do not share an edge. Could be they only share a corner, possibly"
+                                f"error in cleaning edges from delaunay")
+
+    def play_aggressive(self, all_points, pt_to_poly, adj_dict, discrete_pts):
         moves = []
 
         # Generate a move for every unit
@@ -382,6 +406,9 @@ class Player:
         friendly_units_discrete = [(int(x) + self.home_offset, int(y) + self.home_offset) for (x, y) in friendly_units]
 
         for unit_, unit in zip(friendly_units, friendly_units_discrete):
+            if unit not in discrete_pts:
+                continue
+
             # All polys, etc are indexed with discretized pts
             current_polygon = pt_to_poly[unit]
 
@@ -389,29 +416,16 @@ class Player:
             neighboring_enemies = [n for n in neighbors if n not in friendly_units_discrete]
             neighboring_enemy_polygons = [pt_to_poly[ne] for ne in neighboring_enemies]
 
+            # TODO: SPLIT CONSEQUENCES OF IF-ELSE INTO 2 FUNCTIONS
+            # [ ] - find d1 units
+            # [ ] - find d2 units
+
             if len(neighboring_enemies) == 0:
                 # Moving to centroid will spread units out
                 target = current_polygon.centroid.coords[0]
             else:
-                # Strategy - Move to furthest vertex of neighboring edges
-                candidates = set()
-                for polygon in neighboring_enemy_polygons:
-                    intersection = current_polygon.intersection(polygon)
-                    if (
-                        isinstance(intersection, shapely.geometry.LineString) or
-                        isinstance(intersection, shapely.geometry.Point)
-                    ):
-                        # NOTE: We allow polys that only share a corner to be considered as neighbors
-                        points = intersection.coords
-                        for point in list(points):
-                            candidates.add(point)
+                target = self.get_border_unit_target(unit, current_polygon, adj_dict.copy(), friendly_units_discrete, pt_to_poly)
 
-                # further enemy polygon vertex on shared edges
-                if len(candidates) > 0:
-                    target = max(list(candidates), key=lambda pt: (pt[0] - unit[0]) ** 2 + (pt[1] - unit[1]) ** 2)
-                else:
-                    raise RuntimeError(f"Polygons do not share an edge. Could be they only share a corner, possibly"
-                                       f"error in cleaning edges from delaunay")
 
                 # # Strategy - Move to middle of edge - closest edge
                 # candidates = set()
