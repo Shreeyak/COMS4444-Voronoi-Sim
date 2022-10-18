@@ -327,9 +327,10 @@ class Player:
         all_groups_and_outliers = {'groups': defaultdict(list), 'outliers': []}
 
         if per_player:
-            for pl in range(1, 5):
-                if pl != self.player_idx:
+            for pl in range(4):
+                if pl != self.player_idx and len(all_points[pl]) > 0:
                     np_points = np.array(all_points[pl])
+                    print(np_points.shape)
                     clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(np_points)
                     for i in range(len(np_points)):
                         group = clustering.labels_[i]
@@ -339,9 +340,9 @@ class Player:
                             groups_and_outliers_per_player[pl]['groups'][group].append(np_points[i])
             return groups_and_outliers_per_player
         else:
-            np_all_points = np.empty(0, dtype=int)
-            for pl in range(1, 5):
-                if pl != self.player_idx:
+            np_all_points = np.empty((0, 2), dtype=float)
+            for pl in range(4):
+                if pl != self.player_idx and len(all_points[pl]) > 0:
                     np_points = np.array(all_points[pl])
                     np_all_points = np.append(np_all_points, np_points)
             clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(np_all_points)
@@ -393,7 +394,7 @@ class Player:
 
         # DBSCAN - create dicts of groups and outliers
         player_groups_and_outliers = self.get_groups_and_outliers(all_points, eps=3, min_samples=2, per_player=True)
-        plot_dbscan(player_groups_and_outliers, self.current_day)
+        #plot_dbscan(player_groups_and_outliers, self.current_day)
 
         # Construct 2 lists: triangulation/voronoi takes discrete, strategy takes continuous position
         # Note: Discretized points will have duplicates, which are removed (disputed points, both removed).
