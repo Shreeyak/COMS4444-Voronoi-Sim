@@ -280,6 +280,9 @@ class Player:
         else:
             bound_points = shapely.geometry.MultiPoint([(max_x, max_y), (min_x, min_y)])
 
+        if superpolygon.geom_type == 'MultiPolygon':
+            superpolygon = superpolygon.geoms[0]
+
         extended_polygon = bound_points.union(shapely.geometry.MultiPoint(superpolygon.exterior.coords))
         convexhull = extended_polygon.convex_hull
         incursions_ = convexhull.difference(superpolygon)
@@ -392,7 +395,7 @@ class Player:
         discrete_pt2player, all_points = cg.create_pts_player_dict(unit_pos)
 
         # DBSCAN - create dicts of groups and outliers
-        player_groups_and_outliers = self.get_groups_and_outliers(all_points, eps=8, min_samples=3, per_player=True)
+        # player_groups_and_outliers = self.get_groups_and_outliers(all_points, eps=8, min_samples=3, per_player=True)
         # if self.current_day % 20 == 0:
         #     plot_dbscan(player_groups_and_outliers, self.current_day)
         #     print('prInDt')
