@@ -280,6 +280,9 @@ class Player:
         else:
             bound_points = shapely.geometry.MultiPoint([(max_x, max_y), (min_x, min_y)])
 
+        if superpolygon.geom_type == 'MultiPolygon':
+            superpolygon = superpolygon.geoms[0]
+
         extended_polygon = bound_points.union(shapely.geometry.MultiPoint(superpolygon.exterior.coords))
         convexhull = extended_polygon.convex_hull
         incursions_ = convexhull.difference(superpolygon)
@@ -330,7 +333,6 @@ class Player:
             for pl in range(4):
                 if pl != self.player_idx and len(all_points[pl]) > 0:
                     np_points = np.array(all_points[pl])
-                    print(np_points.shape)
                     clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(np_points)
                     for i in range(len(np_points)):
                         group = clustering.labels_[i]
@@ -393,8 +395,10 @@ class Player:
         discrete_pt2player, all_points = cg.create_pts_player_dict(unit_pos)
 
         # DBSCAN - create dicts of groups and outliers
-        player_groups_and_outliers = self.get_groups_and_outliers(all_points, eps=3, min_samples=2, per_player=True)
-        #plot_dbscan(player_groups_and_outliers, self.current_day)
+        # player_groups_and_outliers = self.get_groups_and_outliers(all_points, eps=8, min_samples=3, per_player=True)
+        # if self.current_day % 20 == 0:
+        #     plot_dbscan(player_groups_and_outliers, self.current_day)
+        #     print('prInDt')
 
         # Construct 2 lists: triangulation/voronoi takes discrete, strategy takes continuous position
         # Note: Discretized points will have duplicates, which are removed (disputed points, both removed).
