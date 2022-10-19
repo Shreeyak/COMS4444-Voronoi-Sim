@@ -11,9 +11,9 @@ import shapely.validation
 import scipy
 from sklearn.cluster import DBSCAN
 
-from tests import plot_funcs
-from tests.plot_funcs import plot_units_and_edges, plot_poly_list, plot_incursions, plot_line_list, plot_debug_incur,\
-    plot_dbscan
+# from tests import plot_funcs
+# from tests.plot_funcs import plot_units_and_edges, plot_poly_list, plot_incursions, plot_line_list, plot_debug_incur, \
+#     plot_dbscan
 
 warnings.filterwarnings("ignore", category=shapely.errors.ShapelyDeprecationWarning)
 
@@ -68,6 +68,7 @@ def dist_to_target(unit: Unit, target: tuple[float, float]):
     target = np.array(target)
     dist_to_target = np.linalg.norm(target - current)
     return dist_to_target
+
 
 def move_toward_position(unit: Unit, target: tuple[float, float]):
     current = unit.pos
@@ -147,7 +148,7 @@ class CommandoSquad:
         for unit in units_list:
             self.units.append(unit)
             unit.role = "cmdo_squad"
-    
+
     def set_move_cmds(self):
         """If a target is present, move to that target to kill it"""
         if self.target_unit is not None:
@@ -276,7 +277,7 @@ class CautiousHeros:
                 self.units[flank] = None
         self.update()
 
-    
+
 class CreateGraph:
     def __init__(self, home_offset, player_idx):
         self.home_offset = home_offset
@@ -717,7 +718,7 @@ class Player:
         - Create a graph from all units (adj dict)
         - Create a tree from graph, root at our home base. 
             Use it to: build list of enemies at our border. list of friendlies at border.
-        
+
         """
         unit_id_ = []
         for player in range(4):
@@ -771,10 +772,9 @@ class Player:
             ideal_incur_units.append(unit_max)
 
         # print(incursions)
-        if len(incursions) > 0 and self.current_day % 20 == 0:
-            all_polys = [x.poly for x in units_cls.values()]
-            plot_incursions(all_polys, incursions, units_in_incursions, self.current_day)
-
+        # if len(incursions) > 0 and self.current_day % 20 == 0:
+        #     all_polys = [x.poly for x in units_cls.values()]
+        #     plot_incursions(all_polys, incursions, units_in_incursions, self.current_day)
 
         # Analyze map
         # d1 = [] -> strat_border_patrol()
@@ -809,8 +809,10 @@ class Player:
         if not self.draft_cmdo_start:
             self.draft_cmdo_start = True
             self.units_to_be_drafted = []
-        if self.current_day > 50 and len(self.commando_squads) < self.num_commandos and self.draft_cmdo_start:
-        # if self.current_day > 50 and len(self.commando_squads) < len(ideal_incur_units) and self.draft_cmdo_start:
+
+        total_com = max(self.num_commandos, len(ideal_incur_units))
+        if self.current_day > 50 and len(self.commando_squads) < total_com and self.draft_cmdo_start:
+            # if self.current_day > 50 and len(self.commando_squads) < len(ideal_incur_units) and self.draft_cmdo_start:
             if len(self.units_to_be_drafted) < 3:
                 if self.current_day % self.spawn_days == 0:
                     latest_unit_id = sorted([x.uid for x in avail_units])[-1]
@@ -873,7 +875,6 @@ class Player:
                 - surround and kill enemy target
         """
 
-
         # COMMANDO =- Assign units to kill
 
         # ene_units_border = set()
@@ -894,7 +895,7 @@ class Player:
 
         if last_c < len(self.commando_squads):
             all_enemies = [x for x in units_cls.values() if x.player != self.player_idx]
-            for idx in range(last_c+1, len(self.commando_squads)):
+            for idx in range(last_c + 1, len(self.commando_squads)):
                 csq = self.commando_squads[idx]
                 csq.update_target(units_cls)
                 all_enemies.sort(key=lambda x: dist_to_target(csq.pin, x.pos))
