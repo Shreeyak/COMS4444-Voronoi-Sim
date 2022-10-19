@@ -771,6 +771,9 @@ class Player:
             ideal_incur_units.append(unit_max)
 
         # print(incursions)
+        if len(incursions) > 0 and self.current_day % 20 == 0:
+            all_polys = [x.poly for x in units_cls.values()]
+            plot_incursions(all_polys, incursions, units_in_incursions, self.current_day)
 
 
         # Analyze map
