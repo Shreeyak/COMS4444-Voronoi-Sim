@@ -49,10 +49,10 @@ class VoronoiEngine:
         self.score_curr = np.zeros((4,), dtype=int)
 
         self.unit_history = {self.curr_day: copy.deepcopy(self.game_map.units)}  # Store the initial map state
+        self.player_list = player_list
         self.players = []
         self.player_names = []
-
-        self.add_players(player_list)
+        self.add_players(self.player_list)
 
         self.create_video = False
         self.writer = None
@@ -70,6 +70,10 @@ class VoronoiEngine:
         self.score_total = np.zeros((4,), dtype=int)
         self.score_curr = np.zeros((4,), dtype=int)
         self.unit_history = {self.curr_day: copy.deepcopy(self.game_map.units)}
+
+        self.players = []
+        self.player_names = []
+        self.add_players(self.player_list)
 
     @property
     def units(self):
