@@ -132,6 +132,7 @@ class CommandoSquad:
 
         self.target_killed = self.target_unit not in units_cls.values()
         if self.target_killed:
+            logging.info(f"Target unit has been killed")
             self.target_unit = None
             self.target_supp_vector = None
 
@@ -191,11 +192,11 @@ class CommandoSquad:
             unit.move_cmd = move
             moves.append(move)
 
-        for unit in [self.pin, self.left, self.right]:
-            # unit.target = self.target
-            move = move_toward_position(unit, unit.target)
-            unit.move_cmd = move
-            moves.append(move)
+        # for unit in [self.pin, self.left, self.right]:
+        #     # unit.target = self.target
+        #     move = move_toward_position(unit, unit.target)
+        #     unit.move_cmd = move
+        #     moves.append(move)
 
         return moves
 
@@ -831,18 +832,27 @@ class Player:
         # for csq, tar_unit in zip(self.commando_squads, ene_units_border):
         #     csq.update_target(units_cls)
         #     if csq.target_unit is None:
+        #         print(f"target selection: {csq}, {tar_unit.uid}")
         #         csq.set_target_unit(tar_unit)
         #         csq.update_target(units_cls)
         #         _ = csq.set_move_cmds()
-        for csq, d1_ in zip(self.commando_squads, d1_units):
-            csq.update_target(units_cls)
-            if csq.target_unit is None:
-                csq.set_target_unit(d1_)
-                _ = csq.set_move_cmds()
-
+        # for csq, d1_ in zip(self.commando_squads, d1_units):
+        #     csq.update_target(units_cls)
+        #     if csq.target_unit is None:
+        #         csq.set_target_unit(d1_)
+        #         _ = csq.set_move_cmds()
         if len(self.commando_squads) > 0:
-            self.commando_squads[0].target = (30, 30)
-            self.commando_squads[0].target_unit = None
+            csq = self.commando_squads[0]
+            if csq.target_unit is not None:
+                logging.info(f"Setting a new unit to kill")
+                ene_ = [x for x in units_cls.values() if x.player != self.player_idx]
+                ene = ene_[0]
+                csq.set_target_unit(ene)
+                csq.set_move_cmds()
+
+        # if len(self.commando_squads) > 0:
+        #     self.commando_squads[0].target = (30, 30)
+        #     self.commando_squads[0].target_unit = None
 
 
         for csq in self.commando_squads:
@@ -852,7 +862,7 @@ class Player:
                 tar = None
             logging.info(f"Cmdo target: {tar} at {csq.target}")
             for unit in csq.units:
-                logging.info(f"  moves: {unit.move_cmd}")
+                logging.info(f"  moves: {unit.move_cmd}, curr_pos: {unit.pos}")
 
         # Set the move_cmd attr for each unit
         _ = self.cautious_heros.set_move_cmds()  # Defensive ring
