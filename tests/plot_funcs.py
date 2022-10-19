@@ -35,35 +35,37 @@ def plot_dbscan(dbscan_groups, day):
     plt.savefig(f"/Users/yaroslavzakharov/COMS4444-Voronoi-Sim/tests/plot_map/{day}.png", dpi=300)
 
 
-def plot_units_and_edges(edges, edge_player_id, discrete_pts, discrete_players, pt_to_poly, day):
+def plot_units_and_edges(edges, edge_player_id, units_cls, day):
     # Plot
     fig = plt.figure(1, figsize=(6.0, 6.0), dpi=90)
     fig.set_frameon(True)
     ax = fig.add_subplot(111)
     # set_limits(ax, 0, map_size, 0, map_size)
+    uuids = list(units_cls.keys())
 
     # Plot the valid edges
     for (p1, p2), pl in zip(edges, edge_player_id):
-        x1, y1 = discrete_pts[p1]
-        x2, y2 = discrete_pts[p2]
+        x1, y1 = units_cls[uuids[p1]].pos
+        x2, y2 = units_cls[uuids[p2]].pos
 
         col = np.array(player_colors[pl])  # edge player id includes invalid edges
         plt.plot([x1, x2], [y1, y2], color=col, alpha=0.7, )
 
     # Plot the units
-    for pt, pl in zip(discrete_pts, discrete_players):
-        x, y = pt
+    for unit in units_cls.values():
+        x, y = unit.pos
+        pl = unit.player
 
         col = np.array(player_colors[pl])
         plt.plot(x, y, marker="o", markersize=6, markeredgecolor=col, markerfacecolor=col)
 
-    # Plot the polys
-    for pt, pl in zip(discrete_pts, discrete_players):
-        poly = pt_to_poly[pt]
-        fcol = np.array(player_colors[pl])
-        ecol = np.clip(np.array(player_colors[pl]) * 0.4, a_min=0, a_max=1)
-        patch = PolygonPatch(poly, facecolor=fcol, edgecolor=ecol, alpha=0.2, zorder=-1)  # edgecolor=BLUE
-        ax.add_patch(patch)
+        # Plot the polys
+        poly = unit.poly
+        if poly is not None:
+            fcol = np.array(player_colors[pl])
+            ecol = np.clip(np.array(player_colors[pl]) * 0.4, a_min=0, a_max=1)
+            patch = PolygonPatch(poly, facecolor=fcol, edgecolor=ecol, alpha=0.2, zorder=-1)  # edgecolor=BLUE
+            ax.add_patch(patch)
 
     plt.gca().invert_yaxis()
     # plt.show()
