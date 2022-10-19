@@ -205,7 +205,7 @@ class VoronoiInterface:
     def cleanup(self):
         # video - release and destroy windows
         if self.writer is not None:
-            self.writer.release()
+            self.writer.close()
             self.writer = None
             logging.info(f" Saved video to: {self.video_path}")
         pygame.quit()
