@@ -46,6 +46,22 @@ class Unit:
         self.move_cmd = (0, 0)  # angle, dist.
         self.target = None
 
+    def nearest_fr(self):
+        """Nearest friendly unit"""
+        near_neigh = self.neigh_fr
+        near_neigh = sorted(near_neigh, key=lambda x: dist_to_target(x, self.pos))
+        if len(near_neigh) == 0:
+            return None
+        return near_neigh[0]
+
+    def nearest_ene(self):
+        """Nearest enemy unit"""
+        near_neigh = self.neigh_ene
+        near_neigh = sorted(near_neigh, key=lambda x: dist_to_target(x, self.pos))
+        if len(near_neigh) == 0:
+            return None
+        return near_neigh[0]
+
 
 def dist_to_target(unit: Unit, target: tuple[float, float]):
     current = np.array(unit.pos)
@@ -83,6 +99,9 @@ class CommandoSquad:
         self.target: Optional[tuple[float, float]] = None
         self.target_reached = False
         self.dist_appr = 1.0  # how far pin will be from target
+        self.target_unit = None  # A unit to kill
+        self.target_killed = False
+        self.target_supp_vector = None  # The direction of nearest target's friendly unit
 
         self.add_units(units_list)
         self.pin = self.units[0]
@@ -95,6 +114,34 @@ class CommandoSquad:
         theta = np.deg2rad(45)
         self.rot_right = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
 
+    def set_target_unit(self, target_unit):
+        self.target_unit = target_unit
+        self.target = self.target_unit.pos
+        self.target_killed = False
+        near_fr = self.target_unit.nearest_fr()
+        if near_fr is not None:
+            self.target_supp_vector = np.array([near_fr.pos[0] - self.target[0],
+                                                near_fr.pos[1] - self.target[1]])
+        else:
+            self.target_supp_vector = None  # no nearest unit. Use unit pos
+
+    def update_target(self, units_cls):
+        """If a target unit is given, update the target point"""
+        if self.target_unit is None:
+            return
+
+        self.target_killed = self.target_unit not in units_cls.values()
+        if self.target_killed:
+            self.target_unit = None
+            self.target_supp_vector = None
+
+            # If the target has been killed, retreat
+            near_fr = self.pin.nearest_fr()
+            if near_fr is not None:
+                # if no other friendly unit nearby, doomed anyway
+                self.target = near_fr.pos
+        return
+
     def add_units(self, units_list):
         for unit in units_list:
             self.units.append(unit)
@@ -102,14 +149,21 @@ class CommandoSquad:
     
     def set_move_cmds(self):
         """If a target is present, move to that target to kill it"""
+        if self.target_unit is not None:
+            # TODO: More effecient: predict movement of target and move accordingly
+            #    ref: https://stackoverflow.com/questions/17204513/how-to-find-the-interception-coordinates-of-a-moving-target-in-3d-space
+            self.target = self.target_unit.pos
+
         if self.target is None:
             logging.warning(f"Commando squad does not have a target")
             return
 
-        moves = []
+        # If a target unit is given, get supp vector. Else, just use position info
         # Support vec is line joining target to it's nearest support
-        # todo: change this to correct vector
-        supp_vec = np.array([(self.target[0] - self.pin.pos[0]), (self.target[1] - self.pin.pos[1])])  # shape: [2,]
+        if self.target_supp_vector is not None:
+            supp_vec = self.target_supp_vector
+        else:
+            supp_vec = np.array([(self.target[0] - self.pin.pos[0]), (self.target[1] - self.pin.pos[1])])  # shape: [2,]
         supp_vec = (supp_vec / np.linalg.norm(supp_vec))  # normalize supp vec to magnitude 1
 
         vec_pin = -1 * supp_vec  # We want to approach from opposite direction
@@ -130,11 +184,19 @@ class CommandoSquad:
             self.left.target = self.target + vec_left
             self.right.target = self.target + vec_right
 
+        moves = []
         for unit in self.units:
             # unit.target = self.target
             move = move_toward_position(unit, unit.target)
             unit.move_cmd = move
             moves.append(move)
+
+        for unit in [self.pin, self.left, self.right]:
+            # unit.target = self.target
+            move = move_toward_position(unit, unit.target)
+            unit.move_cmd = move
+            moves.append(move)
+
         return moves
 
     def disband_if_hurt(self):
@@ -707,11 +769,15 @@ class Player:
                 avail_units.remove(unit)
 
         # commando squads
+        valid_squads = []
         for csq in self.commando_squads:
             csq.remove_killed_units(units_cls)
             csq.disband_if_hurt()  # commando squad cannot perform with less than 3 units
             for unit in csq.units:
                 avail_units.remove(unit)  # remove from list of avail units
+            if len(csq.units) > 0:
+                valid_squads.append(csq)
+        self.commando_squads = valid_squads
 
         # d1 - highest priority - layer 1 defense
         d1_units = {x for x in avail_units if len(x.neigh_ene) > 0}
@@ -728,11 +794,11 @@ class Player:
         #             d2_units.add(nf)
         #             avail_units.remove(nf)
         #
-        # # defenders - internal units spread within area of control - centroid strat
-        # def_units = set()
-        # for unit in avail_units:
-        #     def_units.add(unit)
-        #     unit.role = "def"
+        # defenders - internal units spread within area of control - centroid strat
+        def_units = set()
+        for unit in avail_units:
+            def_units.add(unit)
+            unit.role = "def"
         
 
         """Commando squad 
@@ -745,8 +811,8 @@ class Player:
         # draft 3 units
         # todo - logic for drafting units into cmdo squads
         # todo - d1 getting drafted into commando squads
-        if len(avail_units) >= 3:
-            csq_units = list(avail_units)[:3]
+        if self.current_day > 50 and len(def_units) >= 5:
+            csq_units = list(def_units)[:3]
             csq = CommandoSquad(csq_units)
             for unit in csq_units:
                 avail_units.remove(unit)
@@ -756,9 +822,37 @@ class Player:
         if "d1" not in a:
             print("No d1?")
 
-        for idx, csq in enumerate(self.commando_squads):
-            csq.target = (30 + idx*10, 30)
-            _ = csq.set_move_cmds()
+        # Assign units to kill
+        ene_units_border = set()
+        for unit in d1_units:
+            for ene in unit.neigh_ene:
+                ene_units_border.add(ene)
+        ene_units_border = list(ene_units_border)
+        # for csq, tar_unit in zip(self.commando_squads, ene_units_border):
+        #     csq.update_target(units_cls)
+        #     if csq.target_unit is None:
+        #         csq.set_target_unit(tar_unit)
+        #         csq.update_target(units_cls)
+        #         _ = csq.set_move_cmds()
+        for csq, d1_ in zip(self.commando_squads, d1_units):
+            csq.update_target(units_cls)
+            if csq.target_unit is None:
+                csq.set_target_unit(d1_)
+                _ = csq.set_move_cmds()
+
+        if len(self.commando_squads) > 0:
+            self.commando_squads[0].target = (30, 30)
+            self.commando_squads[0].target_unit = None
+
+
+        for csq in self.commando_squads:
+            try:
+                tar = csq.target_unit.uid
+            except AttributeError:
+                tar = None
+            logging.info(f"Cmdo target: {tar} at {csq.target}")
+            for unit in csq.units:
+                logging.info(f"  moves: {unit.move_cmd}")
 
         # Set the move_cmd attr for each unit
         _ = self.cautious_heros.set_move_cmds()  # Defensive ring
