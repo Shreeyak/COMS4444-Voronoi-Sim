@@ -592,6 +592,7 @@ class Player:
 
         self.units_to_be_drafted = []
         self.draft_cmdo_start = False
+        self.num_commandos = 3
 
 
     def get_incursions_polys(self, units_cls: dict[int, Unit]):
@@ -778,7 +779,7 @@ class Player:
         if not self.draft_cmdo_start:
             self.draft_cmdo_start = True
             self.units_to_be_drafted = []
-        if self.current_day > 50 and len(self.commando_squads) == 0 and self.draft_cmdo_start:
+        if self.current_day > 50 and len(self.commando_squads) < self.num_commandos and self.draft_cmdo_start:
             if len(self.units_to_be_drafted) < 3:
                 if self.current_day % self.spawn_days == 0:
                     latest_unit_id = sorted([x.uid for x in avail_units])[-1]
@@ -851,11 +852,13 @@ class Player:
         # ene_units_border = list(ene_units_border)
 
         all_enemies = [x for x in units_cls.values() if x.player != self.player_idx]
+
         for csq in self.commando_squads:
             csq.update_target(units_cls)
-
             all_enemies.sort(key=lambda x: dist_to_target(csq.pin, x.pos))
+
             tar_unit = all_enemies[0]
+            all_enemies.remove(all_enemies[0])
 
             print(f"target selection: {csq}, {tar_unit.uid}")
             csq.set_target_unit(tar_unit)
