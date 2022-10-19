@@ -98,9 +98,9 @@ class CommandoSquad:
         self.units = []
         self.target: Optional[tuple[float, float]] = None
         self.target_reached = False
-        self.dist_appr = 1.0  # how far pin will be from target
+        self.dist_appr = 3.0  # how far pin will be from target
         self.target_unit = None  # A unit to kill
-        self.target_killed = False
+        # self.target_killed = False
         self.target_supp_vector = None  # The direction of nearest target's friendly unit
 
         self.add_units(units_list)
@@ -117,7 +117,7 @@ class CommandoSquad:
     def set_target_unit(self, target_unit):
         self.target_unit = target_unit
         self.target = self.target_unit.pos
-        self.target_killed = False
+        # self.target_killed = False
         near_fr = self.target_unit.nearest_fr()
         if near_fr is not None:
             self.target_supp_vector = np.array([near_fr.pos[0] - self.target[0],
@@ -174,7 +174,7 @@ class CommandoSquad:
         if dist_to_target(self.pin, self.pin.target) < 1:
             self.target_reached = True  # Set flag if near target
 
-        factor_approach = 8  # Start fanning units out based on how near they are. Based on testing.
+        factor_approach = 10  # Start fanning units out based on how near they are. Based on testing.
         if dist_to_target(self.pin, self.target) > self.dist_appr * factor_approach:
             # while far away, move as one
             self.left.target = self.pin.target
@@ -182,8 +182,8 @@ class CommandoSquad:
         else:
             vec_left = np.dot(self.rot_left, supp_vec)
             vec_right = np.dot(self.rot_right, supp_vec)
-            self.left.target = self.target + vec_left
-            self.right.target = self.target + vec_right
+            self.left.target = self.target + vec_left * self.dist_appr
+            self.right.target = self.target + vec_right * self.dist_appr
 
         moves = []
         for unit in self.units:
@@ -497,7 +497,7 @@ class CreateGraph:
         """
         # Cautious heros can mess with the d2 defense logic, because d1 will have an edge to them and not to
         #   newly spawned units in the home base
-        pts = [x.pos for x in units_cls.values() if x.role != "cautious_heros"]
+        pts = [x.pos for x in units_cls.values()]
         units_c = list(units_cls.values())
         tri = scipy.spatial.Delaunay(np.array(pts))
         edges = self.delaunay2edges(tri.simplices)
@@ -589,6 +589,9 @@ class Player:
         self.cg = CreateGraph(self.home_offset, self.player_idx)
         self.cautious_heros = CautiousHeros(self.player_idx, _MAP_W)  # list of uuids
         self.commando_squads = []
+
+        self.units_to_be_drafted = []
+        self.draft_cmdo_start = False
 
 
     def get_incursions_polys(self, units_cls: dict[int, Unit]):
@@ -752,30 +755,51 @@ class Player:
 
         avail_units = {x for x in units_cls.values() if x.player == self.player_idx}
 
-        # cautious heros
-        self.cautious_heros.remove_killed_units(units_cls)  # Remove killed units
-        for unit in self.cautious_heros.valid_units:
-            avail_units.remove(unit)  # remove from list of avail units
-        if self.current_day >= 50:
-            # Whenever new unit is spawned, add it to cautious heros if needed
-            # todo - if a cautious hero is killed, new unit will not be added until next spawn day.
-            #   Should we draft forcefully from defense units? We can defend coordinated atck from default player.
-            if (
-                self.current_day % self.spawn_days == 0
-                and len(self.cautious_heros.valid_units) < self.cautious_heros.max_units
-            ):
-                latest_unit_id = sorted([x.uid for x in avail_units])[-1]
-                unit = units_cls[latest_unit_id]
-                self.cautious_heros.add_unit(unit)
-                avail_units.remove(unit)
+        # # cautious heros
+        # self.cautious_heros.remove_killed_units(units_cls)  # Remove killed units
+        # for unit in self.cautious_heros.valid_units:
+        #     avail_units.remove(unit)  # remove from list of avail units
+        # if self.current_day >= 50:
+        #     # Whenever new unit is spawned, add it to cautious heros if needed
+        #     # todo - if a cautious hero is killed, new unit will not be added until next spawn day.
+        #     #   Should we draft forcefully from defense units? We can defend coordinated atck from default player.
+        #     if (
+        #         self.current_day % self.spawn_days == 0
+        #         and len(self.cautious_heros.valid_units) < self.cautious_heros.max_units
+        #     ):
+        #         latest_unit_id = sorted([x.uid for x in avail_units])[-1]
+        #         unit = units_cls[latest_unit_id]
+        #         self.cautious_heros.add_unit(unit)
+        #         avail_units.remove(unit)
 
         # commando squads
+        # draft 3 units
+        # todo - logic for drafting units into cmdo squads
+        if not self.draft_cmdo_start:
+            self.draft_cmdo_start = True
+            self.units_to_be_drafted = []
+        if self.current_day > 50 and len(self.commando_squads) == 0 and self.draft_cmdo_start:
+            if len(self.units_to_be_drafted) < 3:
+                if self.current_day % self.spawn_days == 0:
+                    latest_unit_id = sorted([x.uid for x in avail_units])[-1]
+                    unit = units_cls[latest_unit_id]
+                    self.units_to_be_drafted.append(unit)
+            else:
+                csq = CommandoSquad(self.units_to_be_drafted)
+                self.commando_squads.append(csq)
+                self.draft_cmdo_start = False
+
+        for unit in self.units_to_be_drafted:
+            if unit in avail_units:
+                avail_units.remove(unit)
+
         valid_squads = []
         for csq in self.commando_squads:
             csq.remove_killed_units(units_cls)
             csq.disband_if_hurt()  # commando squad cannot perform with less than 3 units
             for unit in csq.units:
-                avail_units.remove(unit)  # remove from list of avail units
+                if unit in avail_units:
+                    avail_units.remove(unit)  # remove from list of avail units
             if len(csq.units) > 0:
                 valid_squads.append(csq)
         self.commando_squads = valid_squads
@@ -786,89 +810,66 @@ class Player:
             avail_units.remove(unit)
             unit.role = "d1"
 
-        # # d2 - layer 2 defense - all of d1's friendly neighbors not already in d1
-        # d2_units = set()
-        # for unit in d1_units:
-        #     for nf in unit.neigh_fr:
-        #         if nf not in d1_units and nf in avail_units:
-        #             nf.role = "d2"
-        #             d2_units.add(nf)
-        #             avail_units.remove(nf)
-        #
+        # d2 - layer 2 defense - all of d1's friendly neighbors not already in d1
+        d2_units = set()
+        for unit in d1_units:
+            for nf in unit.neigh_fr:
+                if nf not in d1_units and nf in avail_units:
+                    nf.role = "d2"
+                    d2_units.add(nf)
+                    avail_units.remove(nf)
+
         # defenders - internal units spread within area of control - centroid strat
         def_units = set()
         for unit in avail_units:
             def_units.add(unit)
             unit.role = "def"
-        
+        for unit in def_units:
+            avail_units.remove(unit)
+
+        # Set the move_cmd attr for each unit
+        # _ = self.cautious_heros.set_move_cmds()  # Defensive ring
+        _ = self.strat_border_patrol(d1_units)
+        _ = self.strat_border_patrol(d2_units, d1_units)
+        _ = self.strat_move_to_centroid(def_units)
 
         """Commando squad 
-        - form a Commando squad of 3 units
-        - identify incursions
-        - find enemy units in incursions
-        - filter enemy units based on their isolations (dbscan)
-        - surround and kill enemy target
+                - form a Commando squad of 3 units
+                - identify incursions
+                - find enemy units in incursions
+                - filter enemy units based on their isolations (dbscan)
+                - surround and kill enemy target
         """
-        # draft 3 units
-        # todo - logic for drafting units into cmdo squads
-        # todo - d1 getting drafted into commando squads
-        if self.current_day > 50 and len(def_units) >= 5:
-            csq_units = list(def_units)[:3]
-            csq = CommandoSquad(csq_units)
-            for unit in csq_units:
-                avail_units.remove(unit)
-            self.commando_squads.append(csq)
-
-        a = [x.role for x in units_cls.values() if x.player == self.player_idx]
-        if "d1" not in a:
-            print("No d1?")
-
-        # Assign units to kill
-        ene_units_border = set()
-        for unit in d1_units:
-            for ene in unit.neigh_ene:
-                ene_units_border.add(ene)
-        ene_units_border = list(ene_units_border)
-        # for csq, tar_unit in zip(self.commando_squads, ene_units_border):
-        #     csq.update_target(units_cls)
-        #     if csq.target_unit is None:
-        #         print(f"target selection: {csq}, {tar_unit.uid}")
-        #         csq.set_target_unit(tar_unit)
-        #         csq.update_target(units_cls)
-        #         _ = csq.set_move_cmds()
-        # for csq, d1_ in zip(self.commando_squads, d1_units):
-        #     csq.update_target(units_cls)
-        #     if csq.target_unit is None:
-        #         csq.set_target_unit(d1_)
-        #         _ = csq.set_move_cmds()
-        if len(self.commando_squads) > 0:
-            csq = self.commando_squads[0]
-            if csq.target_unit is not None:
-                logging.info(f"Setting a new unit to kill")
-                ene_ = [x for x in units_cls.values() if x.player != self.player_idx]
-                ene = ene_[0]
-                csq.set_target_unit(ene)
-                csq.set_move_cmds()
-
-        # if len(self.commando_squads) > 0:
-        #     self.commando_squads[0].target = (30, 30)
-        #     self.commando_squads[0].target_unit = None
 
 
+        # COMMANDO =- Assign units to kill
+
+        # ene_units_border = set()
+        # for unit in d1_units:
+        #     for ene in unit.neigh_ene:
+        #         ene_units_border.add(ene)
+        # ene_units_border = list(ene_units_border)
+
+        all_enemies = [x for x in units_cls.values() if x.player != self.player_idx]
         for csq in self.commando_squads:
+            csq.update_target(units_cls)
+
+            all_enemies.sort(key=lambda x: dist_to_target(csq.pin, x.pos))
+            tar_unit = all_enemies[0]
+
+            print(f"target selection: {csq}, {tar_unit.uid}")
+            csq.set_target_unit(tar_unit)
+            csq.update_target(units_cls)
+            _ = csq.set_move_cmds()
+
+        for idx, csq in enumerate(self.commando_squads):
             try:
                 tar = csq.target_unit.uid
             except AttributeError:
                 tar = None
-            logging.info(f"Cmdo target: {tar} at {csq.target}")
+            logging.info(f"Cmdo {idx} target: {tar} at {csq.target}")
             for unit in csq.units:
                 logging.info(f"  moves: {unit.move_cmd}, curr_pos: {unit.pos}")
-
-        # Set the move_cmd attr for each unit
-        _ = self.cautious_heros.set_move_cmds()  # Defensive ring
-        _ = self.strat_border_patrol(d1_units)
-        # _ = self.strat_border_patrol(d2_units, d1_units)
-        # _ = self.strat_move_to_centroid(def_units)
 
         # accumulate all moves in correct order, and return
         moves = []
@@ -918,12 +919,13 @@ class Player:
             if len(candidates) > 0:
                 target = max(list(candidates),
                              key=lambda pt: (pt[0] - unit.pos[0]) ** 2 + (pt[1] - unit.pos[1]) ** 2)
+                move = move_toward_position(unit, target)
+                unit.target = target
             else:
-                raise RuntimeError(f"Doesn't have valid neighboring enemies")
+                logging.error(f"Unit Doesn't have valid neighboring enemies polygon (no common vertices)")
+                move = (0, 0)
 
-            move = move_toward_position(unit, target)
             unit.move_cmd = move
-            unit.target = target
             moves.append(move)
 
         return moves
