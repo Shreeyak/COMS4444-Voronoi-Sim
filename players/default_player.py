@@ -64,6 +64,12 @@ class Player:
 
         moves = []
         for i in range(len(unit_id[self.player_idx])):
+            # testing - dummy plays
+            # distance = 0
+            # angle = 0
+            # moves.append((distance, angle))
+            # continue
+
             if self.player_idx == 0:
                 distance = min(1, 100 - unit_pos[self.player_idx][i].x)
                 angle = np.arctan2(100 - unit_pos[self.player_idx][i].y, 100 - unit_pos[self.player_idx][i].x)
