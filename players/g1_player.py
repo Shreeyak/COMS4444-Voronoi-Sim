@@ -47,10 +47,15 @@ class Unit:
         self.target = None
 
 
+def dist_to_target(unit: Unit, target: tuple[float, float]):
+    current = np.array(unit.pos)
+    target = np.array(target)
+    dist_to_target = np.linalg.norm(target - current)
+    return dist_to_target
+
 def move_toward_position(unit: Unit, target: tuple[float, float]):
     current = unit.pos
-    distance_to_target = np.sqrt((target[0] - current[0]) ** 2 + (target[1] - current[1]) ** 2)
-    distance_to_target = min(1.0, distance_to_target)
+    distance_to_target = min(1.0, dist_to_target(unit, target))
 
     if distance_to_target == 0:
         angle_toward_target = 0.0
@@ -61,25 +66,39 @@ def move_toward_position(unit: Unit, target: tuple[float, float]):
 
 
 class CommandoSquad:
-    def __init__(self):
-        self.units = []
-        self.target = None
+    def __init__(self, units_list: list[Unit]):
+        """Commando Squad designed to kill units
+        Has a pincer motion: 3 units move cohesively, as they approach the target, the pin positions in front of the
+        target and the left/right units flank the target and close in behind them, cutting them off from their support
+        """
         self.max_units = 3
-    
-    def add_unit(self, unit: Unit):
-        if unit in self.units:
-            logging.warning(f"Commando Squad already has this unit: {unit.uid}")
-            return
-        if len(self.units) > 3:
-            logging.warning(f"Commando Squad already has 3 units")
-            return
+        if len(units_list) != self.max_units:
+            logging.warning(f"Command squad only takes {self.max_units} units. Not using others")
+            if len(units_list) > 2:
+                units_list = units_list[:3]
+            else:
+                return
 
-        self.units.append(unit)
-        unit.role = "cmdo_squad"
+        self.units = []
+        self.target: Optional[tuple[float, float]] = None
+        self.target_reached = False
+        self.dist_appr = 1.0  # how far pin will be from target
 
-    def add_units(self, units_list: list[Unit]):
+        self.add_units(units_list)
+        self.pin = self.units[0]
+        self.left = self.units[1]
+        self.right = self.units[2]
+
+        # Rotation matrices
+        theta = np.deg2rad(-45)
+        self.rot_left = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+        theta = np.deg2rad(45)
+        self.rot_right = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+
+    def add_units(self, units_list):
         for unit in units_list:
-            self.add_unit(unit)
+            self.units.append(unit)
+            unit.role = "cmdo_squad"
     
     def set_move_cmds(self):
         """If a target is present, move to that target to kill it"""
@@ -88,13 +107,48 @@ class CommandoSquad:
             return
 
         moves = []
+        # Support vec is line joining target to it's nearest support
+        # todo: change this to correct vector
+        supp_vec = np.array([(self.target[0] - self.pin.pos[0]), (self.target[1] - self.pin.pos[1])])  # shape: [2,]
+        supp_vec = (supp_vec / np.linalg.norm(supp_vec))  # normalize supp vec to magnitude 1
+
+        vec_pin = -1 * supp_vec  # We want to approach from opposite direction
+        vec_pin *= self.dist_appr  # stay this far from target
+        self.pin.target = np.array(self.target) + vec_pin
+
+        if dist_to_target(self.pin, self.pin.target) < 1:
+            self.target_reached = True  # Set flag if near target
+
+        factor_approach = 8  # Start fanning units out based on how near they are. Based on testing.
+        if dist_to_target(self.pin, self.target) > self.dist_appr * factor_approach:
+            # while far away, move as one
+            self.left.target = self.pin.target
+            self.right.target = self.pin.target
+        else:
+            vec_left = np.dot(self.rot_left, supp_vec)
+            vec_right = np.dot(self.rot_right, supp_vec)
+            self.left.target = self.target + vec_left
+            self.right.target = self.target + vec_right
+
         for unit in self.units:
-            move = move_toward_position(unit, self.target)
+            # unit.target = self.target
+            move = move_toward_position(unit, unit.target)
             unit.move_cmd = move
             moves.append(move)
         return moves
 
-    def remove_killed_units(self, units_cls: dict[int, Unit]):
+    def disband_if_hurt(self):
+        if len(self.units) < self.max_units:
+            logging.warning(f"Commando squad has lost a unit. Disbanding squad.")
+            self.disband_squad()
+
+    def disband_squad(self):
+        for unit in self.units:
+            unit.role = None
+            unit.target = None
+        self.units = []
+
+    def remove_killed_units(self, units_cls):
         self.units = [x for x in self.units if x in units_cls.values()]
 
 
@@ -103,20 +157,22 @@ class CautiousHeros:
         self.units = {
             "left": None,
             "right": None,
+            "mid": None,
         }
         self.valid_units = []
         self.max_units = len(self.units)
 
         # Fixed positions around home base
         fort_positions_ = {
-            0: [(1.6, 2.6), (2.6, 1.6)],
-            1: [(1.6, map_size - 2.6), (2.6, map_size - 1.6)],
-            2: [(map_size - 1.6, map_size - 2.6), (map_size - 2.6, map_size - 1.6)],
-            3: [(map_size - 1.6, 2.6), (map_size - 2.6, 1.6)],
+            0: [(1.6, 3.6), (3.6, 1.6), (1.5, 1.5)],
+            1: [(1.6, map_size - 3.6), (3.6, map_size - 1.6), (1.5, map_size - 1.5)],
+            2: [(map_size - 1.6, map_size - 3.6), (map_size - 3.6, map_size - 1.6), (map_size - 1.5, map_size - 1.5)],
+            3: [(map_size - 1.6, 3.6), (map_size - 3.6, 1.6), (map_size - 1.5, 1.5)],
         }
         self.fort_positions = {
             "left": fort_positions_[player_idx][0],
             "right": fort_positions_[player_idx][1],
+            "mid": fort_positions_[player_idx][2],
         }
         self.update()
 
@@ -129,7 +185,7 @@ class CautiousHeros:
             return
 
         num_units = len(self.valid_units)
-        if num_units >= 2:
+        if num_units >= self.max_units:
             logging.warning(f"Cautious Heros already has 2 units")
             return
 
@@ -652,7 +708,8 @@ class Player:
 
         # commando squads
         for csq in self.commando_squads:
-            csq.remove_killed_units(units_cls)  # remove killed units
+            csq.remove_killed_units(units_cls)
+            csq.disband_if_hurt()  # commando squad cannot perform with less than 3 units
             for unit in csq.units:
                 avail_units.remove(unit)  # remove from list of avail units
 
@@ -690,8 +747,7 @@ class Player:
         # todo - d1 getting drafted into commando squads
         if len(avail_units) >= 3:
             csq_units = list(avail_units)[:3]
-            csq = CommandoSquad()
-            csq.add_units(csq_units)
+            csq = CommandoSquad(csq_units)
             for unit in csq_units:
                 avail_units.remove(unit)
             self.commando_squads.append(csq)
