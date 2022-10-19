@@ -594,7 +594,7 @@ class Player:
     def get_incursions_polys(self, units_cls: dict[int, Unit]):
         # todo - get list of friendly units and get their polygons. No need for poly_idx_to_pt
         friendly_units = [x for x in units_cls.values() if x.player == self.player_idx]
-        friendly_polygons = [x.poly for x in friendly_units]
+        friendly_polygons = [x.poly for x in friendly_units if x.poly is not None]
 
         superpolygon = shapely.ops.unary_union(friendly_polygons)
         min_x, min_y, max_x, max_y = superpolygon.bounds
@@ -647,6 +647,18 @@ class Player:
         #     plot_debug_incur(superpolygon, viable_incursions, edge_incursion_boundaries, self.current_day)
 
         return viable_incursions
+
+    # input - list of polygons; output - list of lists containing points in each corresp input poly
+    def incursions_to_enemies(self, incursions, unit_cls):
+        in_poly_list = [[] for _ in range(len(incursions))]
+        for unit in unit_cls.values():
+            if unit.player != self.player_idx:
+                for i in range(len(incursions)):
+                    if incursions[i].contains(shapely.geometry.Point(unit.pos)):
+                        in_poly_list[i].append(unit)
+                        break
+        return in_poly_list
+
 
     def get_groups_and_outliers(self, all_points, eps=3, min_samples=2, per_player=False):
         # DBSCAN - create dicts of groups and outliers
@@ -720,12 +732,6 @@ class Player:
         # all_groups_and_outliers = self.get_groups_and_outliers(all_points, eps=3, min_samples=2, per_player=False)
         # if self.current_day % 20 == 0:
         #     plot_dbscan(player_groups_and_outliers, self.current_day)
-        # # INCURSIONS - Identify regions where enemies are encroaching into our territory.
-        # incursions = self.get_incursions_polys(units_cls)
-        # # print(incursions)
-        # # if len(incursions) > 0:
-        # #     all_polys = [x.poly for x in units_cls.values()]
-        # #     plot_incursions(all_polys, incursions)
 
         # Get polygon of Voronoi regions around each pt (discrete)
         map_size = self.max_dim
@@ -740,6 +746,14 @@ class Player:
 
         # if self.current_day > 78:
         #     plot_units_and_edges(edges, edge_player_id, units_cls, self.current_day)
+
+        # INCURSIONS - Identify regions where enemies are encroaching into our territory.
+        incursions = self.get_incursions_polys(units_cls)
+        units_in_incursions = self.incursions_to_enemies(incursions, units_cls)
+        # print(incursions)
+        if len(incursions) > 0:
+            all_polys = [x.poly for x in units_cls.values()]
+            plot_incursions(all_polys, incursions, units_in_incursions)
 
         # Analyze map
         # d1 = [] -> strat_border_patrol()
@@ -769,16 +783,16 @@ class Player:
                 self.cautious_heros.add_unit(unit)
                 avail_units.remove(unit)
 
-        # commando squads
-        valid_squads = []
-        for csq in self.commando_squads:
-            csq.remove_killed_units(units_cls)
-            csq.disband_if_hurt()  # commando squad cannot perform with less than 3 units
-            for unit in csq.units:
-                avail_units.remove(unit)  # remove from list of avail units
-            if len(csq.units) > 0:
-                valid_squads.append(csq)
-        self.commando_squads = valid_squads
+        # # commando squads
+        # valid_squads = []
+        # for csq in self.commando_squads:
+        #     csq.remove_killed_units(units_cls)
+        #     csq.disband_if_hurt()  # commando squad cannot perform with less than 3 units
+        #     for unit in csq.units:
+        #         avail_units.remove(unit)  # remove from list of avail units
+        #     if len(csq.units) > 0:
+        #         valid_squads.append(csq)
+        # self.commando_squads = valid_squads
 
         # d1 - highest priority - layer 1 defense
         d1_units = {x for x in avail_units if len(x.neigh_ene) > 0}
@@ -786,15 +800,15 @@ class Player:
             avail_units.remove(unit)
             unit.role = "d1"
 
-        # # d2 - layer 2 defense - all of d1's friendly neighbors not already in d1
-        # d2_units = set()
-        # for unit in d1_units:
-        #     for nf in unit.neigh_fr:
-        #         if nf not in d1_units and nf in avail_units:
-        #             nf.role = "d2"
-        #             d2_units.add(nf)
-        #             avail_units.remove(nf)
-        #
+        # d2 - layer 2 defense - all of d1's friendly neighbors not already in d1
+        d2_units = set()
+        for unit in d1_units:
+            for nf in unit.neigh_fr:
+                if nf not in d1_units and nf in avail_units:
+                    nf.role = "d2"
+                    d2_units.add(nf)
+                    avail_units.remove(nf)
+
         # defenders - internal units spread within area of control - centroid strat
         def_units = set()
         for unit in avail_units:
@@ -812,63 +826,63 @@ class Player:
         # draft 3 units
         # todo - logic for drafting units into cmdo squads
         # todo - d1 getting drafted into commando squads
-        if self.current_day > 50 and len(def_units) >= 5:
-            csq_units = list(def_units)[:3]
-            csq = CommandoSquad(csq_units)
-            for unit in csq_units:
-                avail_units.remove(unit)
-            self.commando_squads.append(csq)
-
-        a = [x.role for x in units_cls.values() if x.player == self.player_idx]
-        if "d1" not in a:
-            print("No d1?")
-
-        # Assign units to kill
-        ene_units_border = set()
-        for unit in d1_units:
-            for ene in unit.neigh_ene:
-                ene_units_border.add(ene)
-        ene_units_border = list(ene_units_border)
-        # for csq, tar_unit in zip(self.commando_squads, ene_units_border):
-        #     csq.update_target(units_cls)
-        #     if csq.target_unit is None:
-        #         print(f"target selection: {csq}, {tar_unit.uid}")
-        #         csq.set_target_unit(tar_unit)
-        #         csq.update_target(units_cls)
-        #         _ = csq.set_move_cmds()
-        # for csq, d1_ in zip(self.commando_squads, d1_units):
-        #     csq.update_target(units_cls)
-        #     if csq.target_unit is None:
-        #         csq.set_target_unit(d1_)
-        #         _ = csq.set_move_cmds()
-        if len(self.commando_squads) > 0:
-            csq = self.commando_squads[0]
-            if csq.target_unit is not None:
-                logging.info(f"Setting a new unit to kill")
-                ene_ = [x for x in units_cls.values() if x.player != self.player_idx]
-                ene = ene_[0]
-                csq.set_target_unit(ene)
-                csq.set_move_cmds()
+        # if self.current_day > 50 and len(def_units) >= 5:
+        #     csq_units = list(def_units)[:3]
+        #     csq = CommandoSquad(csq_units)
+        #     for unit in csq_units:
+        #         avail_units.remove(unit)
+        #     self.commando_squads.append(csq)
+        #
+        # a = [x.role for x in units_cls.values() if x.player == self.player_idx]
+        # if "d1" not in a:
+        #     print("No d1?")
+        #
+        # # Assign units to kill
+        # ene_units_border = set()
+        # for unit in d1_units:
+        #     for ene in unit.neigh_ene:
+        #         ene_units_border.add(ene)
+        # ene_units_border = list(ene_units_border)
+        # # for csq, tar_unit in zip(self.commando_squads, ene_units_border):
+        # #     csq.update_target(units_cls)
+        # #     if csq.target_unit is None:
+        # #         print(f"target selection: {csq}, {tar_unit.uid}")
+        # #         csq.set_target_unit(tar_unit)
+        # #         csq.update_target(units_cls)
+        # #         _ = csq.set_move_cmds()
+        # # for csq, d1_ in zip(self.commando_squads, d1_units):
+        # #     csq.update_target(units_cls)
+        # #     if csq.target_unit is None:
+        # #         csq.set_target_unit(d1_)
+        # #         _ = csq.set_move_cmds()
+        # if len(self.commando_squads) > 0:
+        #     csq = self.commando_squads[0]
+        #     if csq.target_unit is not None:
+        #         logging.info(f"Setting a new unit to kill")
+        #         ene_ = [x for x in units_cls.values() if x.player != self.player_idx]
+        #         ene = ene_[0]
+        #         csq.set_target_unit(ene)
+        #         csq.set_move_cmds()
 
         # if len(self.commando_squads) > 0:
         #     self.commando_squads[0].target = (30, 30)
         #     self.commando_squads[0].target_unit = None
 
 
-        for csq in self.commando_squads:
-            try:
-                tar = csq.target_unit.uid
-            except AttributeError:
-                tar = None
-            logging.info(f"Cmdo target: {tar} at {csq.target}")
-            for unit in csq.units:
-                logging.info(f"  moves: {unit.move_cmd}, curr_pos: {unit.pos}")
+        # for csq in self.commando_squads:
+        #     try:
+        #         tar = csq.target_unit.uid
+        #     except AttributeError:
+        #         tar = None
+        #     logging.info(f"Cmdo target: {tar} at {csq.target}")
+        #     for unit in csq.units:
+        #         logging.info(f"  moves: {unit.move_cmd}, curr_pos: {unit.pos}")
 
         # Set the move_cmd attr for each unit
         _ = self.cautious_heros.set_move_cmds()  # Defensive ring
         _ = self.strat_border_patrol(d1_units)
-        # _ = self.strat_border_patrol(d2_units, d1_units)
-        # _ = self.strat_move_to_centroid(def_units)
+        _ = self.strat_border_patrol(d2_units, d1_units)
+        _ = self.strat_move_to_centroid(def_units)
 
         # accumulate all moves in correct order, and return
         moves = []
