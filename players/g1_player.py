@@ -23,28 +23,157 @@ class Unit:
                  pos_int: tuple):
         self.pos = pos
         self.uid = uid
-        self.pos_int = pos_int
         self.player = player
+        self.pos_int = pos_int
 
-        self.disputed = False
         self.role = None
+        self.disputed = False
         self.neigh_fr = []
         self.neigh_ene = []
         self.poly = None
         self.poly_idx = None
         self.poly_vert = None
         self.move_cmd = (0, 0)  # angle, dist.
+        self.target = None
+
+    def reset(self):
+        self.disputed = False
+        self.neigh_fr = []
+        self.neigh_ene = []
+        self.poly = None
+        self.poly_idx = None
+        self.poly_vert = None
+        self.move_cmd = (0, 0)  # angle, dist.
+        self.target = None
 
 
+def move_toward_position(unit: Unit, target: tuple[float, float]):
+    current = unit.pos
+    distance_to_target = np.sqrt((target[0] - current[0]) ** 2 + (target[1] - current[1]) ** 2)
+    distance_to_target = min(1.0, distance_to_target)
+
+    if distance_to_target == 0:
+        angle_toward_target = 0.0
+    else:
+        angle_toward_target = np.arctan2(target[1] - current[1], target[0] - current[0])
+
+    return distance_to_target, angle_toward_target
+
+
+class CommandoSquad:
+    def __init__(self):
+        self.units = []
+        self.target = None
+        self.max_units = 3
+    
+    def add_unit(self, unit: Unit):
+        if unit in self.units:
+            logging.warning(f"Commando Squad already has this unit: {unit.uid}")
+            return
+        if len(self.units) > 3:
+            logging.warning(f"Commando Squad already has 3 units")
+            return
+
+        self.units.append(unit)
+        unit.role = "cmdo_squad"
+
+    def add_units(self, units_list: list[Unit]):
+        for unit in units_list:
+            self.add_unit(unit)
+    
+    def set_move_cmds(self):
+        """If a target is present, move to that target to kill it"""
+        if self.target is None:
+            logging.warning(f"Commando squad does not have a target")
+            return
+
+        moves = []
+        for unit in self.units:
+            move = move_toward_position(unit, self.target)
+            unit.move_cmd = move
+            moves.append(move)
+        return moves
+
+    def remove_killed_units(self, units_cls: dict[int, Unit]):
+        self.units = [x for x in self.units if x in units_cls.values()]
+
+
+class CautiousHeros:
+    def __init__(self, player_idx, map_size):
+        self.units = {
+            "left": None,
+            "right": None,
+        }
+        self.valid_units = []
+        self.max_units = len(self.units)
+
+        # Fixed positions around home base
+        fort_positions_ = {
+            0: [(1.6, 2.6), (2.6, 1.6)],
+            1: [(1.6, map_size - 2.6), (2.6, map_size - 1.6)],
+            2: [(map_size - 1.6, map_size - 2.6), (map_size - 2.6, map_size - 1.6)],
+            3: [(map_size - 1.6, 2.6), (map_size - 2.6, 1.6)],
+        }
+        self.fort_positions = {
+            "left": fort_positions_[player_idx][0],
+            "right": fort_positions_[player_idx][1],
+        }
+        self.update()
+
+    def update(self):
+        self.valid_units = [x for x in self.units.values() if x is not None]
+
+    def add_unit(self, unit):
+        if unit in self.valid_units:
+            logging.warning(f"Cautious heros already has this unit: {unit.uid}")
+            return
+
+        num_units = len(self.valid_units)
+        if num_units >= 2:
+            logging.warning(f"Cautious Heros already has 2 units")
+            return
+
+        for key, val in self.units.items():
+            if val is None:
+                self.units[key] = unit
+                unit.role = "cautious_heros"
+                break
+        self.update()
+
+    def set_move_cmds(self):
+        """If a target is present, move to that target to kill it"""
+        moves = []
+        for flank, unit in self.units.items():
+            if unit is not None:
+                unit.target = self.fort_positions[flank]
+                move = move_toward_position(unit, unit.target)
+                unit.move_cmd = move
+                moves.append(move)
+        return moves
+
+    def remove_killed_units(self, units_cls: dict[int, Unit]):
+        for flank, unit in self.units.items():
+            if unit is not None and unit not in units_cls.values():
+                self.units[flank] = None
+        self.update()
+
+    
 class CreateGraph:
-    def __init__(self, home_offset):
+    def __init__(self, home_offset, player_idx):
         self.home_offset = home_offset
+        self.player_idx = player_idx
         self.kdtree = None
+        self.units_cls = {}
 
     @staticmethod
     def get_unique_uid(pl, uid):
         """Create a unique id for each individual unit. Simulator generates unique unit ids per player"""
         return uid + 10000 * pl
+
+    def print_roles(self):
+        # debug func
+        a = [x.role for x in self.units_cls.values() if x.player == self.player_idx]
+        print(a)
 
     def create_pts_idx_dict(self, unit_pos, unit_id) -> tuple[dict[tuple, int], dict[int, Unit]]:
         """Create list of all points converted to our Unit class data structures and lists indexing into it
@@ -67,8 +196,17 @@ class CreateGraph:
 
                 uuid = self.get_unique_uid(pl, uid_)
                 discretept_to_uuid[pos_int] = uuid
-                unit_c = Unit((x, y), uuid, pl, pos_int)
-                units_cls[uuid] = unit_c
+
+                # Update existing unit object instead of creating new unit object
+                if uuid in self.units_cls:
+                    unit = self.units_cls[uuid]
+                    unit.reset()  # Reset all the other attrb like neighbors. Will be re-calculated
+                    unit.pos = (x, y)
+                    unit.pos_int = pos_int
+                    units_cls[uuid] = self.units_cls[uuid]
+                else:
+                    unit_c = Unit((x, y), uuid, pl, pos_int)
+                    units_cls[uuid] = unit_c
 
                 # Identify disputed units - will be removed so that they don't affect voronoi regions
                 if pos_int in discretept_to_uuid:
@@ -85,6 +223,7 @@ class CreateGraph:
                 discretept_to_uuid.pop(pos_int)
             units_cls[uid].disputed = True
 
+        self.units_cls = units_cls
         return discretept_to_uuid, units_cls
 
     def discretize_unit(self, unit_):
@@ -237,7 +376,9 @@ class CreateGraph:
             list: List of owners of each edge. 0-3: same player unit on both ends of edge,
                 4: diff players on either end of the edge
         """
-        pts = [x.pos for x in units_cls.values()]
+        # Cautious heros can mess with the d2 defense logic, because d1 will have an edge to them and not to
+        #   newly spawned units in the home base
+        pts = [x.pos for x in units_cls.values() if x.role != "cautious_heros"]
         units_c = list(units_cls.values())
         tri = scipy.spatial.Delaunay(np.array(pts))
         edges = self.delaunay2edges(tri.simplices)
@@ -313,7 +454,7 @@ class Player:
 
         self.total_days = total_days
         self.spawn_days = spawn_days
-        self.current_day = 0
+        self.current_day = -1
 
         self.home_offset = 0.5
         self.kdtree = None
@@ -325,6 +466,11 @@ class Player:
             2: (_MAP_W, _MAP_W),
             3: (0, _MAP_W)
         }
+
+        self.cg = CreateGraph(self.home_offset, self.player_idx)
+        self.cautious_heros = CautiousHeros(self.player_idx, _MAP_W)  # list of uuids
+        self.commando_squads = []
+
 
     def get_incursions_polys(self, units_cls: dict[int, Unit]):
         # todo - get list of friendly units and get their polygons. No need for poly_idx_to_pt
@@ -440,101 +586,137 @@ class Player:
             Use it to: build list of enemies at our border. list of friendlies at border.
         
         """
+        self.current_day += 1
         if len(unit_pos[self.player_idx]) == 0:
             return []  # No units on the map
 
-        # DBSCAN - create dicts of groups and outliers
-        # all_groups_and_outliers = self.get_groups_and_outliers(all_points, eps=3, min_samples=2, per_player=False)
-        # if self.current_day % 20 == 0:
-        #     plot_dbscan(player_groups_and_outliers, self.current_day)
-
         # All other lists (discrete pts, etc) index into list of Units class.
-        cg = CreateGraph(self.home_offset)
-        discretept_to_uuid, units_cls = cg.create_pts_idx_dict(unit_pos, unit_id)
+        discretept_to_uuid, units_cls = self.cg.create_pts_idx_dict(unit_pos, unit_id)
 
         # Discrete are accessed like this if needed
         # discrete_uuids = list(discretept_to_uuid.values())
         # discrete_pts = [units_cls[x].pos_int for x in discrete_uuids]
 
+        # DBSCAN - create dicts of groups and outliers
+        # all_groups_and_outliers = self.get_groups_and_outliers(all_points, eps=3, min_samples=2, per_player=False)
+        # if self.current_day % 20 == 0:
+        #     plot_dbscan(player_groups_and_outliers, self.current_day)
+        # # INCURSIONS - Identify regions where enemies are encroaching into our territory.
+        # incursions = self.get_incursions_polys(units_cls)
+        # # print(incursions)
+        # # if len(incursions) > 0:
+        # #     all_polys = [x.poly for x in units_cls.values()]
+        # #     plot_incursions(all_polys, incursions)
+
         # Get polygon of Voronoi regions around each pt (discrete)
         map_size = self.max_dim
-        vor_regions, region_was_unbounded = cg.create_voronoi_regions(units_cls, map_size)
+        vor_regions, region_was_unbounded = self.cg.create_voronoi_regions(units_cls, map_size)
 
         # Assign mapping from units to polys
-        units_cls = cg.set_unit_polys(units_cls, vor_regions)
+        units_cls = self.cg.set_unit_polys(units_cls, vor_regions)
 
         # Graph of units - set neighboring friendlies/enemies
-        edges, edge_player_id = cg.get_delaunay_edges(units_cls)
-        units_cls = cg.set_unit_neighbors(edges, units_cls)
+        edges, edge_player_id = self.cg.get_delaunay_edges(units_cls)
+        units_cls = self.cg.set_unit_neighbors(edges, units_cls)
 
         # if self.current_day > 78:
         #     plot_units_and_edges(edges, edge_player_id, units_cls, self.current_day)
-
 
         # Analyze map
         # d1 = [] -> strat_border_patrol()
         # d2 = [] -> strat_border_patrol()
         # defenders = [] -> strat_centroid()
         # cautious = [] -> strat_cautious()
+        # strat_move_to_edge_center
+        # strat_move_to_mean_enemy_neighbors
+        # a = [x.role for x in units_cls.values() if x.player == self.player_idx]
+
         avail_units = {x for x in units_cls.values() if x.player == self.player_idx}
 
-        # d1
+        # cautious heros
+        self.cautious_heros.remove_killed_units(units_cls)  # Remove killed units
+        for unit in self.cautious_heros.valid_units:
+            avail_units.remove(unit)  # remove from list of avail units
+        if self.current_day >= 50:
+            # Whenever new unit is spawned, add it to cautious heros if needed
+            # todo - if a cautious hero is killed, new unit will not be added until next spawn day.
+            #   Should we draft forcefully from defense units? We can defend coordinated atck from default player.
+            if (
+                self.current_day % self.spawn_days == 0
+                and len(self.cautious_heros.valid_units) < self.cautious_heros.max_units
+            ):
+                latest_unit_id = sorted([x.uid for x in avail_units])[-1]
+                unit = units_cls[latest_unit_id]
+                self.cautious_heros.add_unit(unit)
+                avail_units.remove(unit)
+
+        # commando squads
+        for csq in self.commando_squads:
+            csq.remove_killed_units(units_cls)  # remove killed units
+            for unit in csq.units:
+                avail_units.remove(unit)  # remove from list of avail units
+
+        # d1 - highest priority - layer 1 defense
         d1_units = {x for x in avail_units if len(x.neigh_ene) > 0}
         for unit in d1_units:
             avail_units.remove(unit)
             unit.role = "d1"
 
-        # d2
-        d2_units = set()
-        for unit in d1_units:
-            for nf in unit.neigh_fr:
-                if nf not in d1_units:
-                    d2_units.add(nf)
-        for unit in d2_units:
-            avail_units.remove(unit)
-            unit.role = "d2"
+        # # d2 - layer 2 defense - all of d1's friendly neighbors not already in d1
+        # d2_units = set()
+        # for unit in d1_units:
+        #     for nf in unit.neigh_fr:
+        #         if nf not in d1_units and nf in avail_units:
+        #             nf.role = "d2"
+        #             d2_units.add(nf)
+        #             avail_units.remove(nf)
+        #
+        # # defenders - internal units spread within area of control - centroid strat
+        # def_units = set()
+        # for unit in avail_units:
+        #     def_units.add(unit)
+        #     unit.role = "def"
+        
 
-        # defenders - centroid strat
-        def_units = set()
-        for unit in avail_units:
-            def_units.add(unit)
-            unit.role = "def"
+        """Commando squad 
+        - form a Commando squad of 3 units
+        - identify incursions
+        - find enemy units in incursions
+        - filter enemy units based on their isolations (dbscan)
+        - surround and kill enemy target
+        """
+        # draft 3 units
+        # todo - logic for drafting units into cmdo squads
+        # todo - d1 getting drafted into commando squads
+        if len(avail_units) >= 3:
+            csq_units = list(avail_units)[:3]
+            csq = CommandoSquad()
+            csq.add_units(csq_units)
+            for unit in csq_units:
+                avail_units.remove(unit)
+            self.commando_squads.append(csq)
+
+        a = [x.role for x in units_cls.values() if x.player == self.player_idx]
+        if "d1" not in a:
+            print("No d1?")
+
+        for idx, csq in enumerate(self.commando_squads):
+            csq.target = (30 + idx*10, 30)
+            _ = csq.set_move_cmds()
 
         # Set the move_cmd attr for each unit
+        _ = self.cautious_heros.set_move_cmds()  # Defensive ring
         _ = self.strat_border_patrol(d1_units)
-        _ = self.strat_border_patrol(d2_units, d1_units)
-        _ = self.strat_move_to_centroid(def_units)
+        # _ = self.strat_border_patrol(d2_units, d1_units)
+        # _ = self.strat_move_to_centroid(def_units)
 
         # accumulate all moves in correct order, and return
         moves = []
         for uid in unit_id[self.player_idx]:
-            unit = units_cls[cg.get_unique_uid(self.player_idx, uid)]
+            unit = units_cls[self.cg.get_unique_uid(self.player_idx, uid)]
             moves.append(unit.move_cmd)
 
         return moves
-        # print("hi")
-        # # todo - get move commands for each set of units
-        #
-        #
-        # moves = self.play_aggressive(units_cls)
-        #
-        # # if self.current_day <= (50 - self.spawn_days) or total_scores[self.player_idx] < max(total_scores):
-        # #     # Create union of all friendly polygons and list of its neighbors
-        # #     superpolygon, s_neighbors = self.create_superpolygon(vor_regions, pt_to_poly, adj_dict)
-        # #     moves = self.play_aggressive(vor_regions, pt_player_dict, pt_to_poly_idx, adj_dict, superpolygon,
-        # #                                  s_neighbors)
-        # # else:
-        # #     moves = self.play_cautious(unit_id, unit_pos, vor_regions, pt_player_dict, pt_to_poly_idx, adj_dict,
-        # #                                superpolygon, s_neighbors)
-        #
-        # incursions = self.get_incursions_polys(units_cls)
-        # # print(incursions)
-        # # if len(incursions) > 0:
-        # #     all_polys = [x.poly for x in units_cls.values()]
-        # #     plot_incursions(all_polys, incursions)
-        #
-        # self.current_day += 1
-        # return moves
 
     def strat_border_patrol(self,
                             units_list: set[Unit],
@@ -579,136 +761,82 @@ class Player:
             else:
                 raise RuntimeError(f"Doesn't have valid neighboring enemies")
 
-            move = self.move_toward_position(unit, target)
+            move = move_toward_position(unit, target)
             unit.move_cmd = move
+            unit.target = target
             moves.append(move)
 
         return moves
 
     def strat_move_to_centroid(self, units_list: set[Unit]) -> list[tuple]:
+        """Defensive units (center of region) - Move to centroid of unit's voronoi polygon
+        Causes units to naturally spread out in the area, as voronoi cells try to minimize their
+        surface area (more circular shape). However, units will be more dense near the origin
+        """
         moves = []
         for unit in units_list:
             target = unit.poly.centroid.coords[0]
-            move = self.move_toward_position(unit, target)
+            move = move_toward_position(unit, target)
             unit.move_cmd = move
+            unit.target = target
             moves.append(move)
         return moves
 
-    @staticmethod
-    def move_toward_position(current: Unit, target: tuple[float, float]):
-        current = current.pos
-        distance_to_target = np.sqrt((target[0] - current[0]) ** 2 + (target[1] - current[1]) ** 2)
+    def strat_move_to_edge_center(
+        self, units_list: set[Unit], valid_friendlies: set[Unit] = None
+    ) -> list[tuple]:
+        """Strategy - Move to middle of closest edge
+        Offensive - Units near the border go to the middle of nearest edge of neighboring enemy unit's polygons
+        This is more even than the furthest vertex of the polygon, as every unit will have one corresponding
+        edge to move to.
+        """
+        moves = []
+        for unit in units_list:
+            neighboring_enemies = [n for n in unit.neigh_ene]
+            neighboring_enemy_polygons = [n.poly for n in neighboring_enemies]
+            current_polygon = unit.poly
 
-        if distance_to_target == 0:
-            angle_toward_target = 0.0
-        else:
-            angle_toward_target = np.arctan2(target[1] - current[1], target[0] - current[0])
+            candidates = set()
+            for polygon in neighboring_enemy_polygons:
+                intersection = current_polygon.intersection(polygon)
+                if isinstance(intersection, shapely.geometry.LineString):
+                    points = intersection.coords[:]  # tuple
+                    points_np = np.array(points)
+                    edge_center = tuple(points_np.mean(axis=0).tolist())
+                    candidates.add(edge_center)
 
-        return max(1.0, distance_to_target), angle_toward_target
+            min_dist = float('inf')
+            target = None
+            for edge_c in candidates:
+                dist = np.linalg.norm(np.array(edge_c) - np.array(unit.pos))
+                if dist < min_dist:
+                    min_dist = dist
+                    target = edge_c
 
-    # def play_cautious(self, unit_id, unit_pos, vor_regions, pt_player_dict, pt_to_poly_idx, adj_dict, superpolygon,
-    #                   s_neighbors):
-    #     moves = self.play_aggressive(vor_regions, pt_player_dict, pt_to_poly_idx, adj_dict, superpolygon, s_neighbors)
-    #     # TODO: Better logic - we don't know that the last 4 units are closes to home (or last to spawn)
-    #     fort_positions = [(0.6, 1.6), (1.6, 0.6), (1.6, 1.6)]
-    #
-    #     for idx in range(len(fort_positions)):
-    #         current_point = unit_pos[self.player_idx][-idx]
-    #         current = (current_point.x, current_point.y)
-    #         target = fort_positions[idx]
-    #         move = self.move_toward_position(current, target)
-    #         moves[-idx] = move
-    #
-    #     return moves
+            move = move_toward_position(unit, target)
+            unit.move_cmd = move
+            unit.target = target
+            moves.append(move)
 
-    # def get_border_unit_target(self, unit: Unit, current_polygon: shapely.geometry.Polygon,
-    #                            friendly_units: list[Unit]):
-    #     # Strategy - Move to furthest vertex of neighboring edges
-    #     neighboring_enemies = [n for n in unit.neigh_ene if n not in friendly_units]
-    #     neighboring_enemy_polygons = [ne.poly for ne in neighboring_enemies]
-    #     candidates = set()
-    #     for polygon in neighboring_enemy_polygons:
-    #         intersection = current_polygon.intersection(polygon)
-    #         if (
-    #             isinstance(intersection, shapely.geometry.LineString) or
-    #             isinstance(intersection, shapely.geometry.Point)
-    #         ):
-    #             # NOTE: We allow polys that only share a corner to be considered as neighbors
-    #             points = intersection.coords
-    #             for point in list(points):
-    #                 candidates.add(point)
-    #
-    #     # further enemy polygon vertex on shared edges
-    #     if len(candidates) > 0:
-    #         return max(list(candidates), key=lambda pt: (pt[0] - unit.pos[0]) ** 2 + (pt[1] - unit.pos[1]) ** 2)
-    #     else:
-    #         return None
-    #         # raise RuntimeError(f"Polygons do not share an edge. Could be they only share a corner, possibly"
-    #         #                     f"error in cleaning edges from delaunay")
-    #
-    # def play_aggressive(self, units_cls: dict[int, Unit]):
-    #     moves = []
-    #
-    #     # Generate a move for every unit
-    #     friendly_units = [x for x in units_cls.values() if x.player == self.player_idx]
-    #
-    #     for unit in friendly_units:
-    #         # All polys, etc are indexed with discretized pts
-    #         current_polygon = unit.poly
-    #
-    #         neighboring_friendlies = unit.neigh_fr
-    #         neighboring_enemies = unit.neigh_ene
-    #         # neighboring_enemy_polygons = [x.poly for x in neighboring_enemies]
-    #
-    #         if len(neighboring_enemies) == 0:
-    #             new_neighboring_enemies = []
-    #             # check if any of the friendly neighbors has an enemy (d2)
-    #             for nf in neighboring_friendlies:
-    #                 neighboring_enemies_nf = nf.neigh_ene
-    #                 if len(neighboring_enemies_nf) > 0:
-    #                     new_neighboring_enemies.append(nf)
-    #
-    #             new_friendly_units = [u for u in friendly_units if u not in new_neighboring_enemies]
-    #             target = self.get_border_unit_target(unit, current_polygon, new_friendly_units)
-    #
-    #             if target is None:
-    #                 # Moving to centroid will spread units out
-    #                 target = current_polygon.centroid.coords[0]
-    #         else:
-    #             target = self.get_border_unit_target(unit, current_polygon, friendly_units)
-    #
-    #
-    #             # # Strategy - Move to middle of edge - closest edge
-    #             # candidates = set()
-    #             # for poly_idx in neighboring_enemy_polygons:
-    #             #     polygon = vor_regions[poly_idx]
-    #             #     intersection = current_polygon.intersection(polygon)
-    #             #     if isinstance(intersection, shapely.geometry.LineString):
-    #             #         points = intersection.coords[:]  # tuple
-    #             #         points_np = np.array(points)
-    #             #         edge_center = tuple(points_np.mean(axis=0).tolist())
-    #             #         candidates.add(edge_center)
-    #             #
-    #             # min_dist = 1e3
-    #             # pt = None
-    #             # for edge_c in candidates:
-    #             #     dist = np.linalg.norm(np.array(edge_c) - np.array(unit))
-    #             #     if dist < min_dist:
-    #             #         min_dist = dist
-    #             #         pt = edge_c
-    #             # if pt is None:
-    #             #     # The neighboring enemies don't share an edge with this unit
-    #             #     # todo: clean the edges
-    #             #     pt = current_polygon.centroid.coords[0]
-    #             # target = pt
-    #
-    #             # # Strategy - Move to mean of neighboring enemies
-    #             # neig_ene = np.array(neighboring_enemies)  # (N, 2)
-    #             # neig_ene_mean = neig_ene.mean(axis=0)
-    #             # target = tuple(neig_ene_mean.tolist())
-    #
-    #         # Note: Earlier, movement angle was calculated from cell center,
-    #         #   not the actual position of the unit
-    #         moves.append(self.move_toward_position(unit, target))
-    #
-    #     return moves
+        return moves
+
+    def strat_move_to_mean_enemy_neighbors(
+        self, units_list: set[Unit], valid_friendlies: set[Unit] = None
+    ) -> list[tuple]:
+        """Strategy - Move to mean of neighboring enemies
+        Offensive strategy - Move towards the mean of the neighboring enemy units.
+        Causes our units to advance. Generally suicidal against dense formations.
+        """
+        moves = []
+        for unit in units_list:
+            neighboring_enemies = [n for n in unit.neigh_ene]
+            neig_ene = np.array([x.pos for x in neighboring_enemies])  # (N, 2)
+            neig_ene_mean = neig_ene.mean(axis=0)
+            target = tuple(neig_ene_mean.tolist())
+
+            move = move_toward_position(unit, target)
+            unit.move_cmd = move
+            unit.target = target
+            moves.append(move)
+        return moves
+
