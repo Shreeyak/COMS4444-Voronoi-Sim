@@ -766,10 +766,12 @@ class Player:
             unit_max = None
             for unit in units_in_inc:
                 d = shapely.geometry.Point(unit.pos).distance(edge_incur)
-                if d > dist:
+                if d >= dist:
                     dist = d
                     unit_max = unit
-            ideal_incur_units.append(unit_max)
+            if unit_max is not None:
+                ideal_incur_units.append(unit_max)
+            # ideal_incur_units.append(unit_max)
 
         # print(incursions)
         # if len(incursions) > 0 and self.current_day % 20 == 0:
