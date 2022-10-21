@@ -86,7 +86,7 @@ def plot_poly_list(poly_list):
     plt.gca().invert_yaxis()
     plt.show()
 
-def plot_incursions(all_polys_list, incursion_poly_list):
+def plot_incursions(all_polys_list, incursion_poly_list, points_in_incursions, day):
     # Plot
     fig = plt.figure(1, figsize=SIZE, dpi=90)
     fig.set_frameon(True)
@@ -98,12 +98,18 @@ def plot_incursions(all_polys_list, incursion_poly_list):
         if poly not in incursion_poly_list:
             patch = PolygonPatch(poly, facecolor=BLUE, alpha=0.3, zorder=-1)  # edgecolor=BLUE
             ax.add_patch(patch)
-    for poly in incursion_poly_list:
+    for poly, points in zip(incursion_poly_list, points_in_incursions):
         patch = PolygonPatch(poly, facecolor=RED, alpha=0.3, zorder=-1)  # edgecolor=BLUE
         ax.add_patch(patch)
+        for unit in points:
+            x, y = unit.pos
+            pl = unit.player
+            col = np.array(player_colors[pl])
+            plt.plot(x, y, marker="o", markersize=6, markeredgecolor=col, markerfacecolor=col)
 
     plt.gca().invert_yaxis()
-    plt.show()
+    # plt.show()
+    plt.savefig(f"/home/shrek/work/cu_course/prob-solving/COMS4444-Voronoi-Sim/tests/plot_incur/{day}.png", dpi=300)
 
 
 def plot_line_list(line_list):
