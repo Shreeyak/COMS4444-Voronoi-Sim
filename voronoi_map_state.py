@@ -66,6 +66,7 @@ class VoronoiGameMap:
         Args:
             units: List of units to be added to the map. Elements are tuple -> (player, (x, y))
         """
+        unit_ids = []
         for (player, pos) in units:
             x, y = pos
             if not 0 <= x < self.map_size:
@@ -77,6 +78,8 @@ class VoronoiGameMap:
 
             self.unit_id += 1  # Allows accessing this attr to find uid of last added unit
             self.units[player][self.unit_id] = pos  # have a unique ID for each unit on the map
+            unit_ids.append(self.unit_id)
+        return unit_ids
 
     def spawn_units(self):
         """Create a unit for each player at home base"""

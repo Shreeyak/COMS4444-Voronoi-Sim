@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import math
 
 import numpy as np
 import pygame
@@ -62,12 +63,15 @@ class VoronoiInterface:
             "uid": [],
             "pos": []
         }
+        self.cursor_pos = (0, 0)  # Position of the mouse cursor
 
         # Game state
         self.reset = False
-        self.add_unit_at = None
-        self.del_unit_at = None
-        self.move_unit_at = None
+        self.add_unit = None
+        self.del_unit = None
+        self.move_unit_begin = None
+        self.move_unit_end = None
+        self.selected_unit = None  # Whether currently moving an unit
         self.kill_units_on_isolate = True
         self.state = GameState.ADD
         logging.info(f"Mode: Add units on click")
@@ -86,9 +90,11 @@ class VoronoiInterface:
 
         # Game state
         self.reset = False
-        self.add_unit_at = None
-        self.del_unit_at = None
-        self.move_unit_at = None
+        self.add_unit = None
+        self.del_unit = None
+        self.move_unit_begin = None
+        self.move_unit_end = None
+        self.selected_unit = None  # Whether currently moving an unit
         self.kill_units_on_isolate = True
         self.state = GameState.ADD
         logging.info(f"Mode: Add units on click")
@@ -106,18 +112,26 @@ class VoronoiInterface:
                 if event.pos[1] > self.renderer.img_h:
                     continue  # Ignore clicks on the text area
 
-                # Del unit
-                if self.state == GameState.DEL:
-                    self.del_unit_at = self.renderer.px_to_metric(event.pos)
+                # Add/move/del unit
+                if self.state == GameState.ADD:
+                    self.add_unit = True
+                elif self.state == GameState.DEL:
+                    self.del_unit = True
+                elif self.state == GameState.MOVE:
+                    self.move_unit_begin = True
+                else:
+                    raise RuntimeError
+                self.move_unit_end = False
 
+            elif event.type == pygame.MOUSEMOTION:
+                self.cursor_pos = self.renderer.px_to_metric(event.pos)
 
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.pos[1] > self.renderer.img_h:
                     continue  # Ignore clicks on the text area
 
-                # Add unit
-                if self.state == GameState.ADD:
-                    self.add_unit_at = self.renderer.px_to_metric(event.pos)
+                if self.state == GameState.MOVE or self.state == GameState.ADD:
+                    self.move_unit_end = True
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
@@ -163,6 +177,16 @@ class VoronoiInterface:
 
         self.kdtree = scipy.spatial.KDTree(self.all_units["pos"])
 
+    def kill_unit_if_isolated(self, player, uid):
+        connectivity_map = self.game_state.get_connectivity_map()
+        pos = self.game_state.units[player][uid]
+        pos_grid = (int(pos[1]), int(pos[0]))
+        if not connectivity_map[pos_grid] == player:
+            self.game_state.units[player].pop(uid)
+            return True
+        else:
+            return False
+
     def update(self):
         """Update the state of the game"""
         if pygame.time.get_ticks() > self.timeout:
@@ -174,16 +198,19 @@ class VoronoiInterface:
             self.init_state()
             self.reset = False
 
-        if self.add_unit_at is not None:
-            self.game_state.add_units([(self.curr_player, self.add_unit_at)])
+        if self.add_unit:
+            uid = self.game_state.add_units([(self.curr_player, self.cursor_pos)])[0]
             self.game_state.compute_occupancy_map()
-            self.add_unit_at = None
-            logging.debug(f"Added unit: Player: {self.curr_player}, Pos: {self.add_unit_at}")
+            # If the unit is isolated, kill it. Otherwise, it may kill other units on game update
+            self.kill_unit_if_isolated(self.curr_player, uid)
+            self.selected_unit = (self.curr_player, uid)  # Track which unit to move
+            self.add_unit = False
+            logging.debug(f"Added unit: Player: {self.curr_player}, Pos: {self.cursor_pos}")
 
         self.build_kdtree()
-        if self.del_unit_at is not None:
-            dist, ii = self.kdtree.query(self.del_unit_at, k=1, distance_upper_bound=self.radius_detect)
-            if dist != float("inf"):
+        if self.del_unit:
+            dist, ii = self.kdtree.query(self.cursor_pos, k=1, distance_upper_bound=self.radius_detect)
+            if not math.isinf(dist):
                 uid = self.all_units["uid"][ii]
                 player = self.all_units["player"][ii]
                 self.game_state.units[player].pop(uid)
@@ -191,9 +218,31 @@ class VoronoiInterface:
                 logging.debug(f"Deleted unit: Player: {player}, Uid: {uid}")
             else:
                 logging.debug(f"No unit to delete")
-            self.del_unit_at = None
+            self.del_unit = False
 
-        if self.kill_units_on_isolate and self.move_unit_at is not None:
+        if self.move_unit_begin:
+            dist, ii = self.kdtree.query(self.cursor_pos, k=1, distance_upper_bound=self.radius_detect)
+            if not math.isinf(dist):
+                uid = self.all_units["uid"][ii]
+                player = self.all_units["player"][ii]
+                self.selected_unit = (player, uid)  # Track which unit to move
+            else:
+                self.selected_unit = None
+            self.move_unit_begin = False
+
+        if self.selected_unit is not None:
+            # Move the selected unit
+            player, uid = self.selected_unit
+            self.game_state.units[player][uid] = self.cursor_pos
+            self.game_state.compute_occupancy_map()
+
+            if self.move_unit_end:
+                # If the unit is isolated, kill it. Otherwise, it may kill other units on game update
+                self.kill_unit_if_isolated(player, uid)
+                self.selected_unit = None
+                self.move_unit_end = False
+
+        if self.kill_units_on_isolate and self.selected_unit is None:
             # When moving, we want to visualize the voronoi cells. Don't kill the poor unit yet.
             self.game_state.update()
 
