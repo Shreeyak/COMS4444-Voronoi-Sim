@@ -109,7 +109,7 @@ class VoronoiInterface:
                 break
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.pos[1] > self.renderer.img_h:
+                if event.pos[1] >= self.renderer.img_h:
                     continue  # Ignore clicks on the text area
 
                 # Add/move/del unit
@@ -124,10 +124,12 @@ class VoronoiInterface:
                 self.move_unit_end = False
 
             elif event.type == pygame.MOUSEMOTION:
+                if event.pos[1] >= self.renderer.img_h:
+                    continue  # Ignore clicks on the text area
                 self.cursor_pos = self.renderer.px_to_metric(event.pos)
 
             elif event.type == pygame.MOUSEBUTTONUP:
-                if event.pos[1] > self.renderer.img_h:
+                if event.pos[1] >= self.renderer.img_h:
                     continue  # Ignore clicks on the text area
 
                 if self.state == GameState.MOVE or self.state == GameState.ADD:
@@ -202,7 +204,8 @@ class VoronoiInterface:
             uid = self.game_state.add_units([(self.curr_player, self.cursor_pos)])[0]
             self.game_state.compute_occupancy_map()
             # If the unit is isolated, kill it. Otherwise, it may kill other units on game update
-            self.kill_unit_if_isolated(self.curr_player, uid)
+            if self.kill_units_on_isolate:
+                self.kill_unit_if_isolated(self.curr_player, uid)
             self.selected_unit = (self.curr_player, uid)  # Track which unit to move
             self.add_unit = False
             logging.debug(f"Added unit: Player: {self.curr_player}, Pos: {self.cursor_pos}")
@@ -238,7 +241,8 @@ class VoronoiInterface:
 
             if self.move_unit_end:
                 # If the unit is isolated, kill it. Otherwise, it may kill other units on game update
-                self.kill_unit_if_isolated(player, uid)
+                if self.kill_units_on_isolate:
+                    self.kill_unit_if_isolated(player, uid)
                 self.selected_unit = None
                 self.move_unit_end = False
 
@@ -271,9 +275,12 @@ class VoronoiInterface:
         print(f"Keybindings:\n"
               f"  Esc: Quit the game.\n"
               f"  1-4: Select player 0-3\n"
+              f"  A: Mode: Click to Add units\n"
+              f"  S: Mode: Click and drag to move units\n"
+              f"  D: Mode: Click to Delete units\n"
               f"  R: Reset game\n"
-              f"  K: Kill isolated units\n"
-              f"Interactive Mode: Click to add units")
+              f"  K: Toggle - Kill isolated units\n"
+              f"Interactive Mode")
 
         while self.running:
             self.process_input()
@@ -287,7 +294,7 @@ if __name__ == '__main__':
     parser.add_argument("--map_size", "-m", help="Size of the map in km", default=100, type=int)
     args = parser.parse_args()
 
-    game_window_width = 800
+    game_window_width = 1400
     map_size = args.map_size
     logging.basicConfig(level=logging.INFO)
 
