@@ -50,7 +50,7 @@ class VoronoiGameMap:
 
         # Data
         self.cell_origins = _compute_cell_coords(self.map_size)
-        self.unit_id = 1  # Unique ID for each new point
+        self.unit_id = 0  # Unique ID for each new point
         self.units = {0: {}, 1: {}, 2: {}, 3: {}}  # {player: {id: (x, y)}}
         self.occupancy_map = None  # Which cells belong to which player
 
@@ -66,6 +66,7 @@ class VoronoiGameMap:
         Args:
             units: List of units to be added to the map. Elements are tuple -> (player, (x, y))
         """
+        unit_ids = []
         for (player, pos) in units:
             x, y = pos
             if not 0 <= x < self.map_size:
@@ -75,8 +76,10 @@ class VoronoiGameMap:
             if not (0 <= player <= 3):
                 raise ValueError(f"Player ID must be in range [0, 3]: {player}")
 
+            self.unit_id += 1  # Allows accessing this attr to find uid of last added unit
             self.units[player][self.unit_id] = pos  # have a unique ID for each unit on the map
-            self.unit_id += 1
+            unit_ids.append(self.unit_id)
+        return unit_ids
 
     def spawn_units(self):
         """Create a unit for each player at home base"""
