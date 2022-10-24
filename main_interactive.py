@@ -127,6 +127,7 @@ class VoronoiInterface:
                 if event.pos[1] >= self.renderer.img_h:
                     continue  # Ignore clicks on the text area
                 self.cursor_pos = self.renderer.px_to_metric(event.pos)
+                self.cursor_pos = (int(self.cursor_pos[0]) + 0.5, int(self.cursor_pos[1]) + 0.5)
 
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.pos[1] >= self.renderer.img_h:

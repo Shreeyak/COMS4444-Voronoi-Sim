@@ -111,6 +111,57 @@ python main_interactive.py [-m <map_size>]
 2. Variable Grid Size - Visualize strategies on a smaller map
 
 
+# Player - Dev thoughts
+
+- Identify when commando is in danger of being cut off: 
+  - get the center line of the polygon 
+    - densify superpoly boundary, voronoi diagram of these points, take all vertices 
+      inside superpoly and join into a line)
+  - find enemies closing in to cut off:
+    - project all enemy points to poly centerline. If len of any projection is less than
+      threshold, it's in danger
+  - ALTERNATE: Simplify the home poly with the distance equal to threshold. Any
+    "fingers" will be cut off. Taking the diff against home poly with identify those regions.
+    If a cmdo unit is within a cut finger, it's in danger.
+  - if in danger, retreat to anchor
+
+- Commando positioning:
+  - Get linestring of the border: all points with neigh enemies. 
+    - Optional: Line offset by an amount away from home base: use left/right based on dot product
+      of line from map center to home base
+  - Densify border linestr with num of points equal to num of ready commando units + 2 
+    (ignore points at map border)
+  - These will serve as Cmdos anchors. They cannot go too far from their anchor.
+  - When a new commando squad is added, new anchors created. Assign cmdo squads to them based
+    on nearest unit.
+- Commando state machine:
+  - getting ready state: move to a rally point, wait for all units to arrive into formation
+  - ready state: can be assigned an anchor point
+  - fighting state: reached anchor point. Target closest valid enemy
+  - retreat state: in danger. head towards anchor point
+  - recruit state: lost a unit. head to anchor point, wait to recruit new unit
+  - dead: all units dead. Delete the cmdo squad object
+- Reinforcement units: Optional. extra units that are kept in reserve in case a comando squad is disbanded
+ 
+- D1 line - ideal num of units = points on border.
+  - get ratio of total player units vs ideal units, recruit based on that. We dont want the line to
+    be too dense.
+  - Send recruited units to a vertex (need a class and state machine???)
+- Engineer kamikaze units:
+  - Designated for opening holes in dense enemy defenses by occupying same cell
+- Conquering units:
+  - If an enemy home base is compromised, convert cmdo squad to conq squad. They position themselves 
+    around the enemy home base indefenitely.
+- Predict enemy movement - send commando units on an intercept course. 
+  - If the intercept point is too far from anchor point, lose target, retreat.
+  - If in danger of getting cut off, lose target, retreat.
+- Identify targets based on dbscan. dist=5 should be good. Lock onto valid target 
+  closest to cmdo squad
+  - Once a target is locked on, only change target on lose target condition
+- Add 3 cmdo anchor points within home polygon for defense: along center line of home poly
+  - Joining points into a line is solved using travelling salesman problem. Same can be achieved using
+    the convex hull of these points. Problem is picking a start and end point.
+
 # Dev thoughts
 
 - TODO: Add player color next to player name
