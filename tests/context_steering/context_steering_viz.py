@@ -77,7 +77,9 @@ class ContextSteer:
         self.context_avoid = []  # Aggregated avoid vectors for each context angle
         self.context_chase_diff = None  # Context after subtracting avoid
         self.context_avoid_diff = None
-        self.target_vec = None  # Mean of chase and avoids
+        self.vec_target = None  # Mean of chase and avoids
+        self.vec_chase = None  # Closest chase
+        self.vec_avoid = None  # Mean of avoids
 
     def pos2context_vec(self, pos):
         """Given the position of a unit, get the corresponding context vec"""
@@ -211,8 +213,10 @@ class ContextSteer:
         # Find effective chase vector after influence of agg avoid vector
         # Note: If no chase vector, will run away from avoids
         avoid_vec = avoid_vecs.mean(axis=0)  # Aggregate avoid vecs
-        self.target_vec = chase_vec - avoid_vec
-        self.context_chase = self.get_context_vecs(self.target_vec, "chase")
+        self.vec_target = chase_vec - avoid_vec
+        self.vec_chase = chase_vec
+        self.vec_avoid = avoid_vec
+        self.context_chase = self.get_context_vecs(self.vec_target, "chase")
 
         # Avoid ALL chase vec that point towards an avoid
         mask_avoid = np.zeros_like(self.context_chase).astype(bool)
@@ -248,57 +252,38 @@ class ContextSteer:
         if max_mag > 1e-5:
             self.context_chase /= max_mag
 
+    def draw_vec(self, screen, vector, color, line_width=5):
+        vector_ = vector * self.scale_vec
+        pstart = self.origin * self.scale_px
+        pend = (self.origin + vector_) * self.scale_px
+
+        pygame.draw.line(screen, color, pstart, pend, line_width)
+
     def draw(self, screen, diff):
         line_width = 5
         pygame.draw.circle(screen, (70, 100, 50, 20), self.origin * self.scale_px, 30 * self.scale_px, 5)
         pygame.draw.circle(screen, (50, 30, 30, 20), self.origin * self.scale_px, self.avoid_radius * self.scale_px, 5)
 
-        # Effective target vector
-        col = (120, 50, 120)
-        pstart = (self.origin * self.scale_px).tolist()
-        pend = ((self.origin + self.target_vec * 1.1 * self.scale_vec) * self.scale_px).tolist()
-        # Scale vec into pixel space
-        pygame.draw.line(screen, col, pstart, pend, line_width)
+        # Effective target and mean chase/avoid vector
+        self.draw_vec(screen, self.vec_target * 1.1, (120, 50, 120), line_width)
+        self.draw_vec(screen, self.vec_chase * 1.1, (50, 120, 120), line_width)
+        self.draw_vec(screen, self.vec_avoid * 1.1, (120, 120, 50), line_width)
 
+        # Individual chase/avoid context vectors
         if diff:
+            # After subrtracting avoid from chase and vice-versa
             context_ch = self.context_chase_diff
             context_av = self.context_avoid_diff
         else:
             context_ch = self.context_chase
             context_av = self.context_avoid
         for vec in context_ch:
-            vec_ = vec * self.scale_vec  # Scale vec for vis
-            col = (50, 130, 20, 150)
-            pstart = (self.origin * self.scale_px).tolist()
-            pend = ((self.origin + vec_) * self.scale_px).tolist()
-            # Scale vec into pixel space
-            pygame.draw.line(screen, col, pstart, pend, line_width)
-
-        for vec in context_av:
-            vec_ = vec * self.scale_vec  # Scale vec for vis
-            col = (180, 50, 20)
-            pstart = self.origin * self.scale_px
-            pend = (self.origin + vec_) * self.scale_px
-            # Scale vec into pixel space
-            pygame.draw.line(screen, col, pstart, pend, line_width)
-
+            self.draw_vec(screen, vec, (50, 130, 20, 150), line_width)
         # Highlight max chase vec
         go_vec = context_ch[np.argmax(np.linalg.norm(context_ch, axis=1))]
-        go_vec *= self.scale_vec
-        col = (120, 250, 120, 150)
-        pstart = (self.origin * self.scale_px).tolist()
-        pend = ((self.origin + go_vec) * self.scale_px).tolist()
-        # Scale vec into pixel space
-        pygame.draw.line(screen, col, pstart, pend, line_width)
-
-        # for vec in self.context_cum:
-        #     vec_ = vec * self.scale_vec  # Scale vec for vis
-        #     if np.linalg.norm(vec_) > self.min_vec_size:
-        #         col = (50, 180, 20)
-        #         pstart = (self.origin * self.scale_px).tolist()
-        #         pend = ((self.origin + vec_) * self.scale_px).tolist()
-        #         # Scale vec into pixel space
-        #         pygame.draw.line(screen, col, pstart, pend, line_width)
+        self.draw_vec(screen, go_vec, (120, 250, 120, 150), line_width)
+        for vec in context_av:
+            self.draw_vec(screen, vec, (180, 50, 20), line_width)
 
 
 class VoronoiInterface:
